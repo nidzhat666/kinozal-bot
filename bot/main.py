@@ -5,6 +5,7 @@ import uvicorn
 
 from bot.logger_config import setup_logging
 from bot.telegram_bot import setup_telegram_bot
+from bot.telegram_handlers import process_update
 from config import BOT_SERVER_PORT
 
 logger = setup_logging()
@@ -21,10 +22,7 @@ app = FastAPI(lifespan=app_lifespan)
 
 @app.post("/webhook")
 async def handle_webhook(update: dict):
-    return Response(status_code=status.HTTP_200_OK)
-
-
-async def process_update(update):
+    await process_update(update)
     return Response(status_code=status.HTTP_200_OK)
 
 
