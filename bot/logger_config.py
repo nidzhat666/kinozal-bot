@@ -11,7 +11,7 @@ def setup_logging(tags="undefined"):
     logger.setLevel(logging.INFO)
     loggly_token = LOGGLY_TOKEN
     loggly_host = "logs-01.loggly.com"
-    loggly_path = f"/inputs/{loggly_token}/tag/python"
+    loggly_path = f"/inputs/{loggly_token}/tag/{tags}"
 
     log_handler = HTTPHandler(
         host=loggly_host,
