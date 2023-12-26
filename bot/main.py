@@ -23,6 +23,7 @@ app = FastAPI(lifespan=app_lifespan)
 @app.post("/webhook")
 async def handle_webhook(update: dict):
     await process_update(update)
+    logger.info(f"Received webhook message: {update}")
     return Response(status_code=status.HTTP_200_OK)
 
 
