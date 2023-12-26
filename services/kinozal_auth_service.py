@@ -12,22 +12,21 @@ class KinozalAuthService:
         self.username = username
         self.password = password
 
-    async def authenticate(self) -> aiohttp.ClientSession:
+    async def authenticate(self) -> dict:
         url = kinozal_utils.get_url("/takelogin.php")
         data = {
             "username": self.username,
             "password": self.password
         }
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
 
-        session = aiohttp.ClientSession()
-        try:
-            response = await session.post(url, data=data)
-            if response.status != 200:
-                await session.close()
-                raise Exception(f"Kinozal Status code: {response.status}")
-            return session
-
-        except Exception as e:
-            await session.close()
-            logger.error(f"Failed to authenticate with Kinozal: {e}")
-            raise e
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=data, headers=headers) as response:
+                if response.status != 200:
+                    logger.error("Authentication failed")
+                    raise Exception("Authentication failed")
+                uid = session.cookie_jar._cookies[(KINOZAL_URL, "/")]["uid"]
+                pass_ = session.cookie_jar._cookies[(KINOZAL_URL, "/")]["pass"]
+                return {"uid": uid.value, "pass": pass_.value}

@@ -9,4 +9,4 @@ BOT_SERVER_PORT = os.getenv("BOT_SERVER_PORT")
 LOGGLY_TOKEN = os.getenv("LOGGLY_TOKEN")
 KINOZAL_CREDENTIALS = dict(username=os.getenv("KINOZAL_USERNAME"),
                            password=os.getenv("KINOZAL_PASSWORD"))
-KINOZAL_URL = "https://kinozal.tv"
+KINOZAL_URL = "kinozal.tv"
