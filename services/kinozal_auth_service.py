@@ -1,10 +1,9 @@
 import aiohttp
-
-from bot.logger_config import setup_logging
-from config import KINOZAL_URL
+import logging
+from bot.config import KINOZAL_URL
 from utilities import kinozal_utils
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 class KinozalAuthService:

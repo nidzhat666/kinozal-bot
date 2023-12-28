@@ -1,0 +1,1 @@
+SEARCH_COMMAND = "search"

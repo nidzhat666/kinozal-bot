@@ -1,31 +1,20 @@
-from contextlib import asynccontextmanager
+import asyncio
 
-from fastapi import FastAPI, Response, status
-import uvicorn
-
+from aiogram import Bot, Dispatcher
 from bot.logger_config import setup_logging
-from bot.telegram_bot import setup_telegram_bot
-from bot.telegram_handlers import process_update
-from config import BOT_SERVER_PORT
+from config import TELEGRAM_BOT_TOKEN
+from handlers import search_handler
 
-logger = setup_logging()
-
-
-@asynccontextmanager
-async def app_lifespan(app: FastAPI):
-    setup_telegram_bot()
-    yield
+dp = Dispatcher()
 
 
-app = FastAPI(lifespan=app_lifespan)
+async def main() -> None:
+    setup_logging()
+    bot = Bot(token=TELEGRAM_BOT_TOKEN)
+    dp.include_routers(search_handler.router)
+    await bot.delete_webhook(drop_pending_updates=True)
+    await dp.start_polling(bot)
 
 
-@app.post("/webhook")
-async def handle_webhook(update: dict):
-    await process_update(update)
-    logger.info(f"Received webhook message: {update}")
-    return Response(status_code=status.HTTP_200_OK)
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=BOT_SERVER_PORT)
+if __name__ == '__main__':
+    asyncio.run(main())

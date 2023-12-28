@@ -9,7 +9,7 @@ async def process_update(update: dict):
 
         if text.startswith('/search'):
             query = text[len('/search '):]
-            response_text = await handle_search_command(chat_id, query)
+            response_text = await handle_search_command(query)
             await send_message(chat_id, response_text)
 
 
