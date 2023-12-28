@@ -10,3 +10,4 @@ LOGGLY_TOKEN = os.getenv("LOGGLY_TOKEN")
 KINOZAL_CREDENTIALS = dict(username=os.getenv("KINOZAL_USERNAME"),
                            password=os.getenv("KINOZAL_PASSWORD"))
 KINOZAL_URL = "kinozal.tv"
+LOCAL_BUILD = os.getenv("LOCAL_BUILD", 0)

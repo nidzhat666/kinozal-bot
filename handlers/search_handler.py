@@ -1,14 +1,16 @@
+import logging
+
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import Router
 
 from bot.constants import SEARCH_COMMAND
-from bot.logger_config import logger
 from services.movie_search_service import MovieSearchService
 from services.kinozal_auth_service import KinozalAuthService
 from bot.config import KINOZAL_CREDENTIALS
 from utilities.handlers_utils import extract_text_without_command
 
+logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
 
