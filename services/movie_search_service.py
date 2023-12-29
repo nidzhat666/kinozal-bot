@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from typing import List
 
 import aiohttp
 from bs4 import BeautifulSoup
 
 from utilities.kinozal_utils import get_url
+
+logger = logging.getLogger(__name__)
 
 
 class MovieSearchService:
@@ -26,8 +29,16 @@ class MovieSearchService:
     @staticmethod
     def parse_search_results(text) -> list[dict]:
         soup = BeautifulSoup(text, features="html.parser")
-        results_list = soup.find_all("td", class_="nam")
+        results_list: list[BeautifulSoup] = soup.find_all("tr", class_="bg")
         result = []
         for el in results_list:
-            result.append(dict(name=el.find("a").text))
+            name: BeautifulSoup = el.find("td", class_="nam")
+            if name is None:
+                continue
+            size = el.find_all("td", class_="s")[1]
+            id_ = name.find("a").get("href").split("=")[-1]
+            result.append(dict(name=name.find("a").text,
+                               size=size.text,
+                               id=id_))
+        logger.info(f"Found results: {result}")
         return result

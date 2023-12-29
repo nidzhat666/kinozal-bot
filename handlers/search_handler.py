@@ -39,17 +39,19 @@ async def handle_search_command(message: Message):
 
     try:
         response_message = format_search_results(results)
-        await message.answer(response_message)
+        await message.answer("Выберите результат:", reply_markup=response_message)
         logger.info("Search results sent to user.")
     except Exception as e:
         logger.error(f"Error in sending search results: {e}")
-        await message.answer("Error in processing search results.")
+        await message.answer("Error in processing search results.", exc_info=True)
 
 
-def format_search_results(results: list[dict]) -> str:
-    if not results:
-        return "No results found."
-    elements = [el.get("name") for el in results]
-    formatted_results = '\n'.join(elements)
-    logger.debug(f"Formatted search results: {formatted_results}")
-    return formatted_results
+def format_search_results(results: list[dict]) -> InlineKeyboardMarkup:
+    buttons = []
+    for el in results[:10]:
+        txt = el.get("name").split(" / ")
+        button_text = " | ".join([txt[0], txt[-1]]) + f" ({el.get('size')})"
+        callback_data = f"select_{el.get('id')}"
+        buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return keyboard
