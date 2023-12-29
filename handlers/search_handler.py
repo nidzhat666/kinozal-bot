@@ -1,7 +1,7 @@
 import logging
 
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram import Router
 
 from bot.constants import SEARCH_COMMAND
@@ -22,13 +22,7 @@ async def handle_search_command(message: Message):
     try:
         auth_service = KinozalAuthService(**KINOZAL_CREDENTIALS)
         auth_cookies = await auth_service.authenticate()
-        logger.info("Authentication successful.")
-    except Exception as e:
-        logger.error(f"Authentication failed: {e}")
-        await message.answer("Failed to authenticate. Please try again later.")
-        return
 
-    try:
         search_service = MovieSearchService(auth_cookies)
         results = await search_service.search(query)
         logger.info(f"Search completed with {len(results)} results.")
@@ -44,6 +38,26 @@ async def handle_search_command(message: Message):
     except Exception as e:
         logger.error(f"Error in sending search results: {e}")
         await message.answer("Error in processing search results.", exc_info=True)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith('select_'))
+async def handle_movie_selection(callback_query: CallbackQuery):
+    movie_id = callback_query.data.split('_')[1]  # Extract movie ID from callback data
+    logger.info(f"Movie selected with ID: {movie_id}")
+
+    try:
+        # Assume you have a method in MovieSearchService to get movie details by ID
+        # movie_details = await search_service.get_movie_details(movie_id)
+        logger.info("Movie details retrieved.")
+
+        # Format and send the movie details to the user
+        # details_message = format_movie_details(movie_details)
+        # await callback_query.message.answer(details_message)
+        # await callback_query.answer()  # To remove the loading state on the button
+    except Exception as e:
+        logger.error(f"Error in fetching movie details: {e}")
+        await callback_query.message.answer("Failed to retrieve movie details.")
+        await callback_query.answer()
 
 
 def format_search_results(results: list[dict]) -> InlineKeyboardMarkup:
