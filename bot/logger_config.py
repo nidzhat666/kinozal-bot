@@ -30,5 +30,5 @@ def setup_logging(tags="aiogram_bot"):
 
         logger.propagate = False
     else:
-        coloredlogs.install()
-        logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+        coloredlogs.install(logging.DEBUG)
+        logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
