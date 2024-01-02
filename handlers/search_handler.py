@@ -23,10 +23,10 @@ async def handle_search_command(message: Message):
     logger.info(f"Received search command with query: {query}")
 
     try:
-        auth_service = KinozalAuthService(**KINOZAL_CREDENTIALS)
-        auth_cookies = await auth_service.authenticate()
+        # auth_service = KinozalAuthService(**KINOZAL_CREDENTIALS)
+        # auth_cookies = await auth_service.authenticate()
 
-        search_service = MovieSearchService(auth_cookies)
+        search_service = MovieSearchService()
         results = await search_service.search(query)
         logger.info(f"Search completed with {len(results)} results.")
     except Exception as e:

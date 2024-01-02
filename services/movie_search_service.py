@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class MovieSearchService:
-    def __init__(self, auth_cookies):
-        self.auth_cookies = auth_cookies
 
     async def search(self, query: str) -> list[dict]:
         url = get_url("/browse.php")
@@ -21,7 +19,7 @@ class MovieSearchService:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, cookies=self.auth_cookies) as response:
+                async with session.get(url, params=params) as response:
                     if response.status != 200:
                         error_message = f"Search request failed with status code: {response.status}"
                         logger.error(error_message)

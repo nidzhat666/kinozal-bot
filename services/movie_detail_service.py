@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class MovieDetailService:
-    def __init__(self, auth_cookies):
-        self.auth_cookies = auth_cookies
+    def __init__(self):
         self.base_url = get_url("/details.php")
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
@@ -25,7 +24,7 @@ class MovieDetailService:
     async def _fetch_movie_data(self, params) -> str:
         async with aiohttp.ClientSession() as session:
             try:
-                response = await session.get(self.base_url, params=params, cookies=self.auth_cookies)
+                response = await session.get(self.base_url, params=params)
                 response.raise_for_status()
                 return await response.text()
             except aiohttp.ClientError as e:
@@ -87,7 +86,9 @@ class MovieDetailParser:
     @staticmethod
     def _parse_actors(soup) -> list:
         actors_tag = soup.find(lambda tag: tag.name == "b" and "В ролях:" in tag.text)
-        return [a.text for a in actors_tag.find_next_siblings("span")[0].find_all("a")] if actors_tag else []
+        result = actors_tag.find_next_sibling("span").text.split(", ")
+        logger.debug(f"Retrieved actors: {result}")
+        return result
 
     @staticmethod
     def _parse_image_url(soup) -> str:
@@ -96,17 +97,27 @@ class MovieDetailParser:
 
     @staticmethod
     def _parse_ratings(soup) -> dict:
-        imdb_rating = soup.find("a", href=lambda href: href and "imdb.com" in href).find("span")
+        imdb_rating = soup.find("a", href=lambda href: href and "imdb.com" in href)
+        if imdb_rating:
+            imdb_rating = imdb_rating.find("span").text
+        else:
+            imdb_rating = "-"
 
-        kinopoisk_rating = soup.find_all("a", href=lambda href: href and "kinopoisk.ru" in href)[1].find("span")
-        return (dict(imdb=imdb_rating.text, kinopoisk=kinopoisk_rating.text)
+        kinopoisk_rating = soup.find("a", href=lambda href: href and "kinopoisk.ru" in href)
+        if kinopoisk_rating:
+            kinopoisk_rating = kinopoisk_rating.find("span").text
+        else:
+            kinopoisk_rating = "-"
+
+        return (dict(imdb=imdb_rating, kinopoisk=kinopoisk_rating)
                 if imdb_rating and kinopoisk_rating else {})
 
     @staticmethod
     def _parse_torrent_details(soup) -> list[tuple]:
         video_details = []
-        for b_tag in soup.find_all('b'):
-            key = b_tag.get_text(strip=True).rstrip(':')
-            value = b_tag.next_sibling.strip() if b_tag.next_sibling else None
+        tab_div = soup.find('div', {'id': 'tabs'})
+        for b_tag in tab_div.find_all('b'):
+            key = b_tag.get_text()
+            value = b_tag.next_sibling
             video_details.append((key, value))
         return video_details
