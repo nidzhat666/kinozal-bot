@@ -2,6 +2,9 @@ import json
 import logging
 import sys
 from logging.handlers import HTTPHandler
+
+import coloredlogs
+
 from config import LOGGLY_TOKEN, LOCAL_BUILD
 
 
@@ -27,4 +30,5 @@ def setup_logging(tags="aiogram_bot"):
 
         logger.propagate = False
     else:
+        coloredlogs.install()
         logging.basicConfig(level=logging.INFO, stream=sys.stdout)

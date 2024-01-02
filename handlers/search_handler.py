@@ -9,9 +9,12 @@ from services.movie_search_service import MovieSearchService
 from services.kinozal_auth_service import KinozalAuthService
 from bot.config import KINOZAL_CREDENTIALS
 from utilities.handlers_utils import extract_text_without_command
+from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
+
 router = Router(name=__name__)
+router.include_routers(movie_detail_handler.router)
 
 
 @router.message(Command(SEARCH_COMMAND))
@@ -40,32 +43,12 @@ async def handle_search_command(message: Message):
         await message.answer("Error in processing search results.", exc_info=True)
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith('select_'))
-async def handle_movie_selection(callback_query: CallbackQuery):
-    movie_id = callback_query.data.split('_')[1]  # Extract movie ID from callback data
-    logger.info(f"Movie selected with ID: {movie_id}")
-
-    try:
-        # Assume you have a method in MovieSearchService to get movie details by ID
-        # movie_details = await search_service.get_movie_details(movie_id)
-        logger.info("Movie details retrieved.")
-
-        # Format and send the movie details to the user
-        # details_message = format_movie_details(movie_details)
-        # await callback_query.message.answer(details_message)
-        # await callback_query.answer()  # To remove the loading state on the button
-    except Exception as e:
-        logger.error(f"Error in fetching movie details: {e}")
-        await callback_query.message.answer("Failed to retrieve movie details.")
-        await callback_query.answer()
-
-
 def format_search_results(results: list[dict]) -> InlineKeyboardMarkup:
     buttons = []
     for el in results[:10]:
         txt = el.get("name").split(" / ")
         button_text = " | ".join([txt[0], txt[-1]]) + f" ({el.get('size')})"
-        callback_data = f"select_{el.get('id')}"
+        callback_data = f"select-movie_{el.get('id')}"
         buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard

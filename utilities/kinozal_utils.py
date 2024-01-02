@@ -1,4 +1,4 @@
-from config import KINOZAL_URL
+from bot.config import KINOZAL_URL
 
 
 def get_url(path: str) -> str:
