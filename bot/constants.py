@@ -1,1 +1,2 @@
 SEARCH_COMMAND = "search"
+TORRENT_DEFAULT_CATEGORY = "Movies"

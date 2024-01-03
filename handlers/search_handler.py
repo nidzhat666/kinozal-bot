@@ -1,13 +1,11 @@
 import logging
 
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram import Router
 
 from bot.constants import SEARCH_COMMAND
-from services.movie_search_service import MovieSearchService
-from services.kinozal_auth_service import KinozalAuthService
-from bot.config import KINOZAL_CREDENTIALS
+from services.kinozal_services.movie_search_service import MovieSearchService
 from utilities.handlers_utils import extract_text_without_command
 from . import movie_detail_handler
 
@@ -23,9 +21,6 @@ async def handle_search_command(message: Message):
     logger.info(f"Received search command with query: {query}")
 
     try:
-        # auth_service = KinozalAuthService(**KINOZAL_CREDENTIALS)
-        # auth_cookies = await auth_service.authenticate()
-
         search_service = MovieSearchService()
         results = await search_service.search(query)
         logger.info(f"Search completed with {len(results)} results.")

@@ -5,8 +5,9 @@ from aiogram import Router
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.text_decorations import html_decoration
 
-from services.movie_detail_service import MovieDetailService
+from services.kinozal_services.movie_detail_service import MovieDetailService
 from custom_types.movie_detail_service_types import MovieDetails
+from utilities.kinozal_utils import get_url
 
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
@@ -40,14 +41,14 @@ async def send_movie_details(callback_query: CallbackQuery,
     await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML,
                                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                                                [InlineKeyboardButton(text="Скачать торрент 🔽",
-                                                                     callback_data=f"download-movie_{movie_id}")]
+                                                                     callback_data=f"download-movie_{movie_id}"),
+                                                InlineKeyboardButton(text="Открыть в Кинозале",
+                                                                     url=get_url(f"/details.php?id={movie_id}"))]
                                            ]))
 
 
 def format_message(movie_detail: MovieDetails) -> str:
-    # movie_detail['name'] = escape_special_characters(movie_detail['name'])
     formatted_data = (
-        # f"<a href='{movie_detail['image_url']}'>&#8205;</a>"
         f"{html_decoration.bold('Название')}: {movie_detail['name']}\n"
         f"{html_decoration.bold('Год')}: {movie_detail['year']}\n"
         f"{html_decoration.bold('Жанр')}: {', '.join(movie_detail['genres'])}\n"
