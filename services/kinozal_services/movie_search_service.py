@@ -15,7 +15,7 @@ class MovieSearchService:
 
     async def search(self, query: str) -> list[dict]:
         url = get_url("/browse.php")
-        params = {"s": query, "v": 3001, "t": 1}
+        params = {"s": query, "v": 3, "t": 1, "g": 3}
 
         try:
             async with aiohttp.ClientSession() as session:

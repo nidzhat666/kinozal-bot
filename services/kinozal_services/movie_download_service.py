@@ -30,7 +30,11 @@ class MovieDownloadService:
                 if response.status != 200:
                     raise KinozalApiError(f"Failed to download movie "
                                           f"with status code: {response.status}")
+                response_file = await response.read()
+                if "pay.php" in str(response_file):
+                    raise KinozalApiError("You are not allowed to download this torrent.")
                 async with aiofile.async_open(self.file_path, "wb") as f:
-                    await f.write(await response.read())
+                    await f.write(response_file)
         return {"file_path": self.file_path,
                 "filename": f"{self.movie_id}.torrent"}
+

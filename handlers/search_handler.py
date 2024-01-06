@@ -1,7 +1,6 @@
 import logging
-
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram import Router
 
 from bot.constants import SEARCH_COMMAND
@@ -15,9 +14,7 @@ router = Router(name=__name__)
 router.include_routers(movie_detail_handler.router)
 
 
-@router.message(Command(SEARCH_COMMAND))
-async def handle_search_command(message: Message):
-    query = extract_text_without_command(message.text, SEARCH_COMMAND)
+async def perform_search(query: str, message: Message):
     logger.info(f"Received search command with query: {query}")
 
     try:
@@ -30,7 +27,7 @@ async def handle_search_command(message: Message):
         return
 
     try:
-        response_message = format_search_results(results)
+        response_message = format_search_results(results, query)
         await message.answer("Выберите результат:", reply_markup=response_message)
         logger.info("Search results sent to user.")
     except Exception as e:
@@ -38,12 +35,25 @@ async def handle_search_command(message: Message):
         await message.answer("Error in processing search results.", exc_info=True)
 
 
-def format_search_results(results: list[dict]) -> InlineKeyboardMarkup:
+@router.message(Command(SEARCH_COMMAND))
+async def handle_search_command(message: Message):
+    query = extract_text_without_command(message.text, SEARCH_COMMAND)
+    await perform_search(query, message)
+
+
+@router.callback_query(lambda c: c.data and c.data.startswith("search-movie_"))
+async def handle_search_inline(callback_query: CallbackQuery):
+    query = callback_query.data.split("_")[1]
+    await perform_search(query, callback_query.message)
+    await callback_query.message.delete()
+
+
+def format_search_results(results: list[dict], query) -> InlineKeyboardMarkup:
     buttons = []
     for el in results[:10]:
         txt = el.get("name").split(" / ")
         button_text = " | ".join([txt[0], txt[-1]]) + f" ({el.get('size')})"
-        callback_data = f"select-movie_{el.get('id')}"
+        callback_data = f"select-movie_{el.get('id')}_{query}"
         buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard

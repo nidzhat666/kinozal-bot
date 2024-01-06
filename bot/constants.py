@@ -1,2 +1,3 @@
 SEARCH_COMMAND = "search"
+STATUS_COMMAND = "status"
 TORRENT_DEFAULT_CATEGORY = "Movies"
