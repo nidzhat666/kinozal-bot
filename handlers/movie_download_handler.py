@@ -16,8 +16,9 @@ logger = logging.getLogger(__name__)
 
 @router.callback_query(lambda c: check_action(c.data, "download_movie"))
 async def handle_movie_download(callback_query: CallbackQuery):
-    movie_id = callback_query.data.split("_")[1]
-    category = callback_query.data.split("_")[2]
+    callback_data = redis_callback_get(callback_query.data)
+    movie_id = callback_data.get("movie_id")
+    category = callback_data.get("category")
     logger.info(f"Handling download request for movie ID: {movie_id}")
 
     try:
