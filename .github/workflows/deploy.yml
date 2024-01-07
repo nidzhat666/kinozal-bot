@@ -23,7 +23,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.SSH_KEY }}
           script: |
             REPO_DIR=~/kinozal_bot/
             REPO_URL=git@github.com:${{ github.repository }}.git
