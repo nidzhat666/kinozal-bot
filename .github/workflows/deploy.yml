@@ -25,7 +25,6 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            scp .env ${username}@${host}:~/kinozal_bot/
             REPO_DIR=~/kinozal_bot/
             GITHUB_REPO=https://nidzhat666:${{ secrets.GITHUB_TOKEN }}@github.com/nidzhat666/kinozal-bot.git
             cd $REPO_DIR && git pull $GITHUB_REPO master
