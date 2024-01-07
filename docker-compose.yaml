@@ -6,17 +6,13 @@ services:
     ports:
       - "6379:6379"
     command: redis-server --save 20 1 --loglevel warning
-    volumes:
-      - cache:/data
 
   bot:
     depends_on:
       - cache
-    build: .
-    volumes:
-      - .:/usr/src/app
+    image: nidzhat/kinozal_bot:latest
+    restart: always
 
 volumes:
   cache:
     driver: local
-

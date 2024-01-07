@@ -1,4 +1,4 @@
-name: Deploy to VDS
+name: Deploy to VDS Server
 
 on:
   push:
@@ -8,29 +8,32 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up SSH
-        env:
-          SSH_KEY: ${{ secrets.SSH_KEY }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
+      - name: Build and Push Docker Image
         run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H $SERVER_IP >> ~/.ssh/known_hosts
+          docker build -t ${{ secrets.DOCKER_HUB_REPO }}:latest .
+          echo ${{ secrets.DOCKER_HUB_PASSWORD }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
+          docker push ${{ secrets.DOCKER_HUB_REPO }}:latest
 
+      - name: SSH and Deploy
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            REPO_DIR=~/kinozal_bot/
+            REPO_URL=git@github.com:${{ github.repository }}.git
+            COMPOSE_PATH=/path/to/deployment-dir/your-docker-compose-path/docker-compose.yml
 
-      - name: Deploy to Server
-        env:
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-        run: |
-          ssh -T $SERVER_USER@$SERVER_IP << EOF
-            cd ~/kinozal-bot
-            docker-compose pull
-            docker-compose up -d
-          EOF
+            if [ ! -d "$REPO_DIR" ]; then
+              git clone $REPO_URL $REPO_DIR
+            else
+              (cd $REPO_DIR && git pull)
+            fi
+
+            docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
+            docker-compose -f $COMPOSE_PATH up -d
