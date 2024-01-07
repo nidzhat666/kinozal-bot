@@ -2,9 +2,8 @@ name: Deploy to VDS
 
 on:
   push:
-    paths:
-      - "Pipenv"
-      - "Pipenv.lock"
+    branches:
+      - main
 
 jobs:
   deploy:
