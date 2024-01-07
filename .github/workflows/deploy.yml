@@ -30,14 +30,14 @@ jobs:
             cd $REPO_DIR && git pull $GITHUB_REPO master
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
             touch .env
-            TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-            KINOZAL_USERNAME: ${{ secrets.KINOZAL_USERNAME }}
-            KINOZAL_PASSWORD: ${{ secrets.KINOZAL_PASSWORD }}
-            QBT_HOST: ${{ vars.QBT_HOST }}
-            QBT_USERNAME: ${{ secrets.QBT_USERNAME }}
-            QBT_PASSWORD: ${{ secrets.QBT_PASSWORD }}
-            QBT_PORT: ${{ vars.QBT_PORT }}
-            REDIS_HOST: ${{ vars.REDIS_HOST }}
-            REDIS_PORT: ${{ vars.REDIS_PORT }}
-            REDIS_DB: ${{ vars.REDIS_DB }}
+            echo TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }} >> .env
+            echo KINOZAL_USERNAME=${{ secrets.KINOZAL_USERNAME }} >> .env
+            echo KINOZAL_PASSWORD=${{ secrets.KINOZAL_PASSWORD }} >> .env
+            echo QBT_HOST=${{ vars.QBT_HOST }} >> .env
+            echo QBT_USERNAME=${{ secrets.QBT_USERNAME }} >> .env
+            echo QBT_PASSWORD=${{ secrets.QBT_PASSWORD }} >> .env
+            echo QBT_PORT=${{ vars.QBT_PORT }} >> .env
+            echo REDIS_HOST=${{ vars.REDIS_HOST }} >> .env
+            echo REDIS_PORT=${{ vars.REDIS_PORT }} >> .env
+            echo REDIS_DB=${{ vars.REDIS_DB }} >> .env
             docker-compose up -d
