@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery
 
 from bot.constants import TORRENT_DEFAULT_CATEGORY
 from handlers.torrents_statuses import handle_status_command
-from utilities.handlers_utils import redis_callback_get, redis_callback_save
+from utilities.handlers_utils import redis_callback_get
 from services.kinozal_services.movie_download_service import MovieDownloadService
 from services.kinozal_services.kinozal_auth_service import KinozalAuthService
 from services.qbt_services import get_client, add_torrent

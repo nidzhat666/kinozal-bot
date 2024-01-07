@@ -28,3 +28,7 @@ def redis_callback_get(callback_key: str):
     if serialized_data:
         return json.loads(serialized_data)
     return None
+
+
+def check_action(callback_data: dict, action: str) -> bool:
+    return callback_data and callback_data.get("action") == action
