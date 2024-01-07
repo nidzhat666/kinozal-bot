@@ -27,7 +27,6 @@ jobs:
           script: |
             REPO_DIR=~/kinozal_bot/
             REPO_URL=git@github.com:${{ github.repository }}.git
-            COMPOSE_PATH=/path/to/deployment-dir/your-docker-compose-path/docker-compose.yml
 
             if [ ! -d "$REPO_DIR" ]; then
               git clone $REPO_URL $REPO_DIR
@@ -36,4 +35,4 @@ jobs:
             fi
 
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
-            docker-compose -f $COMPOSE_PATH up -d
+            docker-compose up -d
