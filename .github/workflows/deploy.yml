@@ -27,6 +27,8 @@ jobs:
           script: |
             REPO_DIR=~/kinozal_bot/
             REPO_URL=git@github.com:${{ github.repository }}.git
+            
+            echo "Cloning $REPO_URL into $REPO_DIR"
 
             if [ ! -d "$REPO_DIR" ]; then
               git clone $REPO_URL $REPO_DIR
