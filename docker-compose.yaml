@@ -12,6 +12,7 @@ services:
       - cache
     image: nidzhat/kinozal_bot:latest
     restart: always
+    env_file: .env
 
 volumes:
   cache:
