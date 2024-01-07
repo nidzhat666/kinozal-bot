@@ -1,0 +1,20 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+aiogram = "*"
+aioqbt = "*"
+coloredlogs = "*"
+pip = "*"
+install = "*"
+python-dotenv = "*"
+redis = "*"
+beautifulsoup4 = "*"
+aiofile = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"
