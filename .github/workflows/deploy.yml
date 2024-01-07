@@ -9,12 +9,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      TELEGRAM_BOT_TOKEN: ${{ env.TELEGRAM_BOT_TOKEN }}
-      KINOZAL_USERNAME: ${{ env.KINOZAL_USERNAME }}
-      KINOZAL_PASSWORD: ${{ env.KINOZAL_PASSWORD }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      KINOZAL_USERNAME: ${{ secrets.KINOZAL_USERNAME }}
+      KINOZAL_PASSWORD: ${{ secrets.KINOZAL_PASSWORD }}
       QBT_HOST: ${{ vars.QBT_HOST }}
-      QBT_USERNAME: ${{ env.QBT_USERNAME }}
-      QBT_PASSWORD: ${{ env.QBT_PASSWORD }}
+      QBT_USERNAME: ${{ secrets.QBT_USERNAME }}
+      QBT_PASSWORD: ${{ secrets.QBT_PASSWORD }}
       QBT_PORT: ${{ vars.QBT_PORT }}
       REDIS_HOST: ${{ vars.REDIS_HOST }}
       REDIS_PORT: ${{ vars.REDIS_PORT }}
@@ -37,7 +37,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             REPO_DIR=~/kinozal_bot/
-            GITHUB_REPO=https://nidzhat666:${{secrets.GIT_TOKEN}}@github.com/nidzhat666/kinozal-bot.git
+            GITHUB_REPO=https://nidzhat666:${{ secrets.GITHUB_TOKEN }}@github.com/nidzhat666/kinozal-bot.git
             cd $REPO_DIR && git pull $GITHUB_REPO master
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
             docker-compose up -d
