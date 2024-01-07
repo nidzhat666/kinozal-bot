@@ -41,6 +41,6 @@ jobs:
           script: |
             REPO_DIR=~/kinozal_bot/
             GITHUB_REPO=https://nidzhat666:${{secrets.GIT_TOKEN}}@github.com/nidzhat666/kinozal-bot.git
-            cd $REPO_DIR && git pull $GITHUB_REPO
+            cd $REPO_DIR && git pull $GITHUB_REPO master
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
             docker-compose up -d
