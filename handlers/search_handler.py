@@ -5,7 +5,8 @@ from aiogram import Router
 
 from bot.constants import SEARCH_COMMAND
 from services.kinozal_services.movie_search_service import MovieSearchService
-from utilities.handlers_utils import extract_text_without_command
+from utilities.handlers_utils import (extract_text_without_command, redis_callback_save,
+                                      redis_callback_get)
 from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
@@ -41,9 +42,12 @@ async def handle_search_command(message: Message):
     await perform_search(query, message)
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("search-movie_"))
+@router.callback_query(
+    lambda c: c.data and redis_callback_get(c.data).get("action") == "search-movie"
+)
 async def handle_search_inline(callback_query: CallbackQuery):
-    query = callback_query.data.split("_")[1]
+    callback_data = redis_callback_get(callback_query.data)
+    query = callback_data.get("query")
     await perform_search(query, callback_query.message)
     await callback_query.message.delete()
 
@@ -53,7 +57,11 @@ def format_search_results(results: list[dict], query) -> InlineKeyboardMarkup:
     for el in results[:10]:
         txt = el.get("name").split(" / ")
         button_text = " | ".join([txt[0], txt[-1]]) + f" ({el.get('size')})"
-        callback_data = f"select-movie_{el.get('id')}_{query}"
-        buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
+        callback_data = dict(action="movie_detail", movie_id=el.get("id"), query=query)
+        callback_key = redis_callback_save(callback_data)
+        logger.debug(f"Callback data: {callback_data}")
+        logger.debug(f"Callback key: {callback_key}")
+        buttons.append([InlineKeyboardButton(text=button_text, callback_data=callback_key)])
+
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard

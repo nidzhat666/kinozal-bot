@@ -15,3 +15,7 @@ QBT_CREDENTIALS = dict(username=os.getenv("QBT_USERNAME"),
 QBT_HOST = os.getenv("QBT_HOST")
 QBT_PORT = os.getenv("QBT_PORT")
 LOCAL_BUILD = os.getenv("LOCAL_BUILD", 0)
+
+REDIS_HOST = os.getenv("REDIS_HOST")
+REDIS_PORT = os.getenv("REDIS_PORT")
+REDIS_DB = os.getenv("REDIS_DB")

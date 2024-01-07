@@ -10,6 +10,7 @@ from custom_types.movie_detail_service_types import MovieDetails
 from services.qbt_services.qbt_get_categories import qbt_get_categories
 from services.qbt_services.qbt_base_client import get_client
 from utilities.kinozal_utils import get_url
+from utilities.handlers_utils import redis_callback_get, redis_callback_save
 from bot.config import QBT_CREDENTIALS
 
 logger = logging.getLogger(__name__)
@@ -18,10 +19,13 @@ router = Router(name=__name__)
 movie_detail_service = MovieDetailService()
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("select-movie_"))
+@router.callback_query(
+    lambda c: c.data and redis_callback_get(c.data).get("action") == "movie_detail"
+)
 async def handle_movie_selection(callback_query: CallbackQuery):
-    movie_id = callback_query.data.split("_")[1]
-    query = callback_query.data.split("_")[2]
+    callback_data = redis_callback_get(callback_query.data)
+    movie_id = callback_data.get("movie_id")
+    query = callback_data.get("query")
     logger.info(f"Movie selected with ID: {movie_id}")
     try:
         response = await fetch_movie_details(movie_id)
@@ -47,10 +51,13 @@ async def send_movie_details(callback_query: CallbackQuery,
     await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML,
                                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                                                [InlineKeyboardButton(text=f"Скачать торрент в {category} 🔽",
-                                                                     callback_data=f"download-movie_{movie_id}_{category}")
+                                                                     callback_data=redis_callback_save(dict(action="download_movie",
+                                                                                                            movie_id=movie_id,
+                                                                                                            category=category)))
                                                 for category in categories],
                                                [InlineKeyboardButton(text="Назад к результатам поиска",
-                                                                     callback_data=f"search-movie_{query}"), ],
+                                                                     callback_data=redis_callback_save(dict(action="search-movie",
+                                                                                                            query=query))), ],
                                                [InlineKeyboardButton(text="Открыть в Кинозале",
                                                                      url=get_url(f"/details.php?id={movie_id}"))]
                                            ]))

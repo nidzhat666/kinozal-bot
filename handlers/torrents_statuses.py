@@ -51,7 +51,7 @@ async def handle_status_command(message: Message):
     await send_status_message(message)
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("refresh-status"))
+@router.callback_query(lambda c: c.data and c.data == "refresh-status")
 async def refresh_status(callback_query: CallbackQuery):
     if callback_query.message.text != await get_status_message():
         await callback_query.message.edit_text(await get_status_message(), reply_markup=get_inline_keyboard())
