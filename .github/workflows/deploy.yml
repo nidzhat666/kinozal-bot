@@ -8,6 +8,20 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      BOT_SERVER_PORT: ${{ secrets.BOT_SERVER_PORT }}
+      LOGGLY_TOKEN: ${{ secrets.LOGGLY_TOKEN }}
+      KINOZAL_USERNAME: ${{ secrets.KINOZAL_USERNAME }}
+      KINOZAL_PASSWORD: ${{ secrets.KINOZAL_PASSWORD }}
+      LOCAL_BUILD: ${{ secrets.LOCAL_BUILD }}
+      QBT_HOST: ${{ secrets.QBT_HOST }}
+      QBT_USERNAME: ${{ secrets.QBT_USERNAME }}
+      QBT_PASSWORD: ${{ secrets.QBT_PASSWORD }}
+      QBT_PORT: ${{ secrets.QBT_PORT }}
+      REDIS_HOST: ${{ secrets.REDIS_HOST }}
+      REDIS_PORT: ${{ secrets.REDIS_PORT }}
+      REDIS_DB: ${{ secrets.REDIS_DB }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -26,7 +40,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             REPO_DIR=~/kinozal_bot/
-            cd $REPO_DIR && git pull
+            GITHUB_REPO=https://nidzhat666:${{secrets.GIT_TOKEN}}@github.com/nidzhat666/kinozal-bot.git
+            cd $REPO_DIR && git pull $GITHUB_REPO
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
             docker-compose up -d
-#
