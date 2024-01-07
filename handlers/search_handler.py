@@ -6,7 +6,7 @@ from aiogram import Router
 from bot.constants import SEARCH_COMMAND
 from services.kinozal_services.movie_search_service import MovieSearchService
 from utilities.handlers_utils import (extract_text_without_command, redis_callback_save,
-                                      redis_callback_get)
+                                      redis_callback_get, check_action)
 from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
@@ -42,9 +42,7 @@ async def handle_search_command(message: Message):
     await perform_search(query, message)
 
 
-@router.callback_query(
-    lambda c: c.data and redis_callback_get(c.data).get("action") == "search-movie"
-)
+@router.callback_query(lambda c: check_action(c.data, "search_movie"))
 async def handle_search_inline(callback_query: CallbackQuery):
     callback_data = redis_callback_get(callback_query.data)
     query = callback_data.get("query")

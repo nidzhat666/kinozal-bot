@@ -4,7 +4,7 @@ from aiogram.types import CallbackQuery
 
 from bot.constants import TORRENT_DEFAULT_CATEGORY
 from handlers.torrents_statuses import handle_status_command
-from utilities.handlers_utils import redis_callback_get
+from utilities.handlers_utils import redis_callback_get, check_action
 from services.kinozal_services.movie_download_service import MovieDownloadService
 from services.kinozal_services.kinozal_auth_service import KinozalAuthService
 from services.qbt_services import get_client, add_torrent
@@ -14,9 +14,7 @@ router = Router(name=__name__)
 logger = logging.getLogger(__name__)
 
 
-@router.callback_query(
-    lambda c: c.data and redis_callback_get(c.data).get("action") == "download_movie"
-)
+@router.callback_query(lambda c: check_action(c.data, "download_movie"))
 async def handle_movie_download(callback_query: CallbackQuery):
     movie_id = callback_query.data.split("_")[1]
     category = callback_query.data.split("_")[2]

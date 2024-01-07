@@ -62,7 +62,7 @@ def create_reply_markup(movie_id: Union[int, str], query: str, categories: list)
     return InlineKeyboardMarkup(inline_keyboard=[
         download_buttons,
         [InlineKeyboardButton(text="Назад к результатам поиска",
-                              callback_data=handlers_utils.redis_callback_save(dict(action="search-movie", query=query)))],
+                              callback_data=handlers_utils.redis_callback_save(dict(action="search_movie", query=query)))],
         [InlineKeyboardButton(text="Открыть в Кинозале",
                               url=kinozal_utils.get_url(f"/details.php?id={movie_id}"))]
     ])
