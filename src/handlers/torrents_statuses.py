@@ -1,4 +1,6 @@
 import logging
+
+from aiogram.exceptions import TelegramBadRequest
 from math import floor
 
 from aiogram import Router
@@ -53,5 +55,7 @@ async def handle_status_command(message: Message):
 
 @router.callback_query(lambda c: c.data and c.data == "refresh-status")
 async def refresh_status(callback_query: CallbackQuery):
-    if callback_query.message.text != await get_status_message():
+    try:
         await callback_query.message.edit_text(await get_status_message(), reply_markup=get_inline_keyboard())
+    except TelegramBadRequest as e:
+        logger.warning("Error in refreshing status: %s", e)
