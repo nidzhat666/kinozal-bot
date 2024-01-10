@@ -25,7 +25,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            REPO_DIR=~/kinozal_bot/
+            REPO_DIR=~/kinozal-bot/
             GITHUB_REPO=https://nidzhat666:${{ secrets.GITHUB_TOKEN }}@github.com/nidzhat666/kinozal-bot.git
             cd $REPO_DIR && git pull $GITHUB_REPO master
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
