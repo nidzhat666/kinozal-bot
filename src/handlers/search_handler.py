@@ -32,8 +32,8 @@ async def perform_search(query: str, message: Message):
         await message.answer("Выберите результат:", reply_markup=response_message)
         logger.info("Search results sent to user.")
     except Exception as e:
-        logger.error(f"Error in sending search results: {e}")
-        await message.answer("Error in processing search results.", exc_info=True)
+        logger.error(f"Error in sending search results: {e}", exc_info=True)
+        await message.answer("Error in processing search results.")
 
 
 @router.message(Command(SEARCH_COMMAND))
