@@ -39,7 +39,8 @@ jobs:
             docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
             rm -rf .env
             touch .env
-            echo "Environment variables: ${{env}}"
+            echo "Environment variables env: ${{env}}"
+            echo "Environment variables vars: ${{vars}}"
             echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
             echo "KINOZAL_USERNAME=${{ secrets.KINOZAL_USERNAME }}" >> .env
             echo "KINOZAL_PASSWORD=${{ secrets.KINOZAL_PASSWORD }}" >> .env
