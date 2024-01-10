@@ -6,7 +6,8 @@ on:
       - master
 
 jobs:
-  deploy:
+
+  docker-image-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -17,6 +18,11 @@ jobs:
           docker build -t ${{ secrets.DOCKER_HUB_REPO }}:latest .
           echo ${{ secrets.DOCKER_HUB_PASSWORD }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
           docker push ${{ secrets.DOCKER_HUB_REPO }}:latest
+          
+
+  server-deploy:
+    runs-on: ubuntu-latest
+    steps:
 
       - name: SSH and Deploy
         uses: appleboy/ssh-action@master
