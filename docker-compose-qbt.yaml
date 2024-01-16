@@ -6,7 +6,7 @@ services:
       - PUID=1000
       - PGID=1000
       - WEBUI_PORT=8080
-      - QBT_EULA="accept"
+      - QBT_EULA=accept
     image: qbittorrentofficial/qbittorrent-nox:latest
     ports:
       - "6881:6881/tcp"
