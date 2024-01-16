@@ -6,7 +6,7 @@ services:
       - PUID=1000
       - PGID=1000
       - WEBUI_PORT=8080
-    image: qbittorrentofficial/qbittorrent-nox:latest
+    image: qbittorrentofficial/qbittorrent-nox:alpha
     ports:
       - "6881:6881/tcp"
       - "6881:6881/udp"
