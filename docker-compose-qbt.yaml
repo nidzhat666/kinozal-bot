@@ -14,3 +14,4 @@ services:
     volumes:
       - ./config:/config
       - /mnt/ssd/downloads:/downloads
+    tty: true
