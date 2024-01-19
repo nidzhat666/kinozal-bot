@@ -1,7 +1,10 @@
 import json
+import logging
 import uuid
 
 from services.redis_services.client import redis_client
+
+logger = logging.getLogger(__name__)
 
 
 def extract_text_without_command(message_text, command):
@@ -16,6 +19,7 @@ def extract_text_without_command(message_text, command):
 
 
 def redis_callback_save(callback_data: dict) -> str:
+    logger.debug(f"Saving callback data: {callback_data}")
     query_key = str(uuid.uuid4())
     serialized_data = json.dumps(callback_data)
 
@@ -24,6 +28,7 @@ def redis_callback_save(callback_data: dict) -> str:
 
 
 def redis_callback_get(callback_key: str):
+    logger.debug(f"Retrieving callback data for key: {callback_key}")
     serialized_data = redis_client.get(callback_key)
     if serialized_data:
         return json.loads(serialized_data)

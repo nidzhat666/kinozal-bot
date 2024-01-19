@@ -7,16 +7,15 @@ from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, C
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.config import QBT_CREDENTIALS
-from bot.constants import STATUS_COMMAND
+from bot.constants import STATUS_COMMAND, REFRESH_CALLBACK, TORRENT_DETAILED_CALLBACK
 from services.qbt_services import get_client
 from services.qbt_services.qbt_status import torrents_info
+from utilities.handlers_utils import (redis_callback_get,
+                                      redis_callback_save, check_action)
 from utilities.common import truncate_string
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
-
-# Constants
-REFRESH_ALL_BUTTON_DATA = "refresh-all"
 
 
 def format_progress_bar(progress: float) -> str:
@@ -41,11 +40,14 @@ async def get_torrents() -> list:
 
 def get_inline_keyboard(torrents):
     """Creates an inline keyboard with a button for each torrent."""
-    buttons = [
-        [InlineKeyboardButton(text=format_status_message(torrent), callback_data=f"torrent-{torrent.hash}")]
-        for torrent in torrents
-    ]
-    buttons.append([InlineKeyboardButton(text="Refresh All", callback_data=REFRESH_ALL_BUTTON_DATA)])
+    buttons = []
+    for torrent in torrents:
+        callback_data = redis_callback_save({"action": TORRENT_DETAILED_CALLBACK,
+                                             "torrent_hash": torrent.hash})
+        buttons.append([InlineKeyboardButton(text=format_status_message(torrent),
+                                             callback_data=callback_data)])
+
+    buttons.append([InlineKeyboardButton(text="Refresh All", callback_data=REFRESH_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -63,6 +65,7 @@ async def refresh_status_message(callback_query: CallbackQuery):
     try:
         await callback_query.message.edit_text("Select a torrent:", reply_markup=keyboard)
     except TelegramBadRequest:
+        logger.info("Status hasn't changed.")
         await callback_query.answer("Status hasn't changed.")
 
 
@@ -72,19 +75,15 @@ async def handle_status_command(message: Message):
     await send_status_message(message)
 
 
-@router.callback_query(lambda c: c.data and c.data == REFRESH_ALL_BUTTON_DATA)
+@router.callback_query(lambda c: c.data and c.data == REFRESH_CALLBACK)
 async def refresh_all_status(callback_query: CallbackQuery):
     """Handles the 'Refresh All' action for the status message."""
 
     await refresh_status_message(callback_query)
 
 
-@router.callback_query(lambda c: c.data and c.data.startswith("torrent-"))
+@router.callback_query(lambda c: check_action(c.data, TORRENT_DETAILED_CALLBACK))
 async def handle_torrent_button(callback_query: CallbackQuery):
-    torrent_hash = callback_query.data.split("-")[1]  # Extract the torrent hash from the callback data
-    # Here you would handle the specific action for the torrent. For example:
-    # Show detailed status, start/stop, etc.
-    # For this example, we'll just log the hash.
+    torrent_hash = redis_callback_get(callback_query.data)["torrent_hash"]
     logger.info(f"Torrent selected: {torrent_hash}")
-    # You would then update the message or respond appropriately
     await callback_query.answer(f"You selected torrent with hash: {torrent_hash}")
