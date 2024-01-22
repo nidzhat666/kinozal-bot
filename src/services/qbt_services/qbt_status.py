@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from aioqbt.api import TorrentInfo, InfoFilter
+from aioqbt.api import TorrentInfo
 from aioqbt.client import APIClient
 
 logger = logging.getLogger(__name__)
@@ -9,21 +9,21 @@ logger = logging.getLogger(__name__)
 
 async def torrents_info(client: APIClient,
                         filter_: str = None,
-                        sort: str = None) -> list[TorrentInfo]:
+                        sort: str = None,
+                        hashes: list | tuple = ()) -> list[TorrentInfo]:
     """
     Get torrents info
+    :param hashes:
     :param sort:
     :param filter_:
     :param client:
     :return: list[dict]
     """
-    logger.info("Getting torrents info.")
     torrents = []
     async with client:
         for torrent in await client.torrents.info(filter=filter_,
-                                                  sort=sort):
+                                                  sort=sort, hashes=hashes):
             torrents.append(torrent)
-    logger.info("Got torrents info.")
     return torrents
 
 

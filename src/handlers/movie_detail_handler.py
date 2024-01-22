@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.utils.text_decorations import html_decoration
 
+from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
 from services.kinozal_services.movie_detail_service import MovieDetailService
 from custom_types.movie_detail_service_types import MovieDetails
 from services.qbt_services import qbt_get_categories, get_client
@@ -19,7 +20,7 @@ router = Router(name=__name__)
 movie_detail_service = MovieDetailService()
 
 
-@router.callback_query(lambda c: check_action(c.data, "movie_detail"))
+@router.callback_query(lambda c: check_action(c.data, MOVIE_DETAILED_CALLBACK))
 async def handle_movie_selection(callback_query: CallbackQuery):
     callback_data = handlers_utils.redis_callback_get(callback_query.data)
     movie_id, query = callback_data.get("movie_id"), callback_data.get("query")
@@ -55,14 +56,14 @@ def create_reply_markup(movie_id: Union[int, str], query: str, categories: list)
     download_buttons = [
         InlineKeyboardButton(
             text=f"Скачать торрент в {category} 🔽",
-            callback_data=handlers_utils.redis_callback_save(dict(action="download_movie", movie_id=movie_id, category=category))
+            callback_data=handlers_utils.redis_callback_save(dict(action=DOWNLOAD_TORRENT_CALLBACK, movie_id=movie_id, category=category))
         ) for category in categories
     ]
 
     return InlineKeyboardMarkup(inline_keyboard=[
         download_buttons,
         [InlineKeyboardButton(text="Назад к результатам поиска",
-                              callback_data=handlers_utils.redis_callback_save(dict(action="search_movie", query=query)))],
+                              callback_data=handlers_utils.redis_callback_save(dict(action=SEARCH_MOVIE_CALLBACK, query=query)))],
         [InlineKeyboardButton(text="Открыть в Кинозале",
                               url=kinozal_utils.get_url(f"/details.php?id={movie_id}"))]
     ])

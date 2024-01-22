@@ -13,6 +13,9 @@ python-dotenv = "*"
 redis = "*"
 beautifulsoup4 = "*"
 aiofile = "*"
+pytest = "*"
+pytest-asyncio = "*"
+pytest-mock = "*"
 
 [dev-packages]
 
