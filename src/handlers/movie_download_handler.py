@@ -3,7 +3,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery
 
 from bot.constants import TORRENT_DEFAULT_CATEGORY, DOWNLOAD_TORRENT_CALLBACK
-from handlers.torrents_statuses import handle_status_command
+from handlers.torrents_statuses_handler import handle_status_command
 from utilities.handlers_utils import redis_callback_get, check_action
 from services.kinozal_services.movie_download_service import MovieDownloadService
 from services.kinozal_services.kinozal_auth_service import KinozalAuthService

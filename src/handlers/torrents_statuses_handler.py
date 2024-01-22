@@ -1,18 +1,17 @@
 import logging
-from math import floor
 
 from aiogram import Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
-from aiogram.exceptions import TelegramBadRequest
+from math import floor
 
 from bot.config import QBT_CREDENTIALS
 from bot.constants import STATUS_COMMAND, REFRESH_CALLBACK, TORRENT_DETAILED_CALLBACK
 from services.qbt_services import get_client
 from services.qbt_services.qbt_status import torrents_info
-from utilities.handlers_utils import (redis_callback_get,
-                                      redis_callback_save, check_action)
 from utilities.common import truncate_string
+from utilities.handlers_utils import (redis_callback_save)
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
@@ -70,7 +69,7 @@ async def refresh_status_message(callback_query: CallbackQuery):
 
 
 @router.message(Command(STATUS_COMMAND))
-async def handle_status_command(message: Message):
+async def handle_status_command(message: Message, edit_message: bool = False):
     """Handles the status command from a user."""
     await send_status_message(message)
 
@@ -80,10 +79,3 @@ async def refresh_all_status(callback_query: CallbackQuery):
     """Handles the 'Refresh All' action for the status message."""
 
     await refresh_status_message(callback_query)
-
-
-@router.callback_query(lambda c: check_action(c.data, TORRENT_DETAILED_CALLBACK))
-async def handle_torrent_button(callback_query: CallbackQuery):
-    torrent_hash = redis_callback_get(callback_query.data)["torrent_hash"]
-    logger.info(f"Torrent selected: {torrent_hash}")
-    await callback_query.answer(f"You selected torrent with hash: {torrent_hash}")
