@@ -1,6 +1,5 @@
 import logging
 
-from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram import Router
 
@@ -14,9 +13,9 @@ router = Router(name=__name__)
 router.include_routers(movie_detail_handler.router)
 
 
-@router.message(Command(SEARCH_COMMAND))
+@router.message()
 async def quality_choice(message: Message):
-    query = extract_text_without_command(message.text, SEARCH_COMMAND)
+    query = message.text
     quality_4k_uuid = redis_callback_save({"quality": "4K",
                                            "action": SEARCH_MOVIE_QUALITY_CALLBACK,
                                            "id": 7, "query": query})
