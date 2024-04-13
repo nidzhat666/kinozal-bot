@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class MovieSearchService:
 
-    async def search(self, query: str) -> list[dict]:
+    async def search(self, query: str, quality: str | int) -> list[dict]:
         """
         Search for movies based on a query string.
 
@@ -21,9 +21,11 @@ class MovieSearchService:
 
         Raises:
             KinozalApiError: If the search request or parsing fails.
+            :param query: Movie search query.
+            :param quality: Quality of the movie.
         """
         url = get_url("/browse.php")
-        params = {"s": query, "v": 3, "t": 1, "g": 3}
+        params = {"s": query, "v": quality, "t": 1, "g": 3}
         logger.debug(f"Initiating search for query: {query}")
 
         try:
