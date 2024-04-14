@@ -1,5 +1,6 @@
 SEARCH_COMMAND = "search"
 STATUS_COMMAND = "status"
+REFRESH_PLEX_COMMAND = "refresh_plex"
 TORRENT_DEFAULT_CATEGORY = "Movies"
 
 # Callbacks Actions

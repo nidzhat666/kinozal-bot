@@ -18,3 +18,6 @@ LOCAL_BUILD = os.getenv("LOCAL_BUILD", 0)
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = os.getenv("REDIS_PORT")
 REDIS_DB = os.getenv("REDIS_DB")
+
+PLEX_URL = os.getenv("PLEX_URL")
+PLEX_TOKEN = os.getenv("PLEX_TOKEN")
