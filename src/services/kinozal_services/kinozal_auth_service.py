@@ -1,8 +1,9 @@
+import logging
 from multiprocessing import AuthenticationError
 
 import aiohttp
-import logging
-from bot.config import KINOZAL_URL
+from yarl import URL
+
 from utilities import kinozal_utils
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,9 @@ class KinozalAuthService:
                         error_message = f"Authentication failed with status code: {response.status}"
                         logger.error(error_message)
                         raise AuthenticationError(error_message)
-                    uid = session.cookie_jar._cookies[(KINOZAL_URL, "/")]["uid"]
-                    pass_ = session.cookie_jar._cookies[(KINOZAL_URL, "/")]["pass"]
+                    kinozal_url = URL(kinozal_utils.get_url())
+                    uid = session.cookie_jar.filter_cookies(kinozal_url)["uid"]
+                    pass_ = session.cookie_jar.filter_cookies(kinozal_url)["pass"]
                     return {"uid": uid.value, "pass": pass_.value}
         except aiohttp.ClientError as e:
             error_message = f"HTTP client error during authentication: {e}"
