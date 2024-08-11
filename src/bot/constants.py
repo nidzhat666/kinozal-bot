@@ -19,3 +19,8 @@ TORRENT_STATUS_QUEUED = "queued"
 TORRENT_STATUS_DOWNLOADING = "downloading"
 TORRENT_STATUS_PAUSED = "paused"
 TORRENT_STATUS_SEEDING = "seeding"
+
+KINOZAL_QUALITY_MAP = {
+    7: "4K",
+    3: "1080p | 720p"
+}
