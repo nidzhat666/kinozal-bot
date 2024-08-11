@@ -10,6 +10,6 @@ RUN pipenv install --deploy --ignore-pipfile
 
 WORKDIR /usr/src/app/src
 
-ENV PYTHONPATH /usr/src/app/src
+ENV PYTHONPATH=/usr/src/app/src
 
 CMD ["pipenv", "run", "python", "bot/main.py"]

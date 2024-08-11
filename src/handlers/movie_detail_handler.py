@@ -2,16 +2,16 @@ import logging
 from typing import Union
 
 from aiogram import Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.enums.parse_mode import ParseMode
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.text_decorations import html_decoration
 
+from bot.config import QBT_CREDENTIALS
 from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
-from services.kinozal_services.movie_detail_service import MovieDetailService
 from custom_types.movie_detail_service_types import MovieDetails
+from services.kinozal_services.movie_detail_service import MovieDetailService
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import kinozal_utils, handlers_utils
-from bot.config import QBT_CREDENTIALS
 from utilities.handlers_utils import check_action
 
 logger = logging.getLogger(__name__)
@@ -23,12 +23,12 @@ movie_detail_service = MovieDetailService()
 @router.callback_query(lambda c: check_action(c.data, MOVIE_DETAILED_CALLBACK))
 async def handle_movie_selection(callback_query: CallbackQuery):
     callback_data = handlers_utils.redis_callback_get(callback_query.data)
-    movie_id, query = callback_data.get("movie_id"), callback_data.get("query")
+    movie_id, query, quality = callback_data.get("movie_id"), callback_data.get("query"), callback_data.get("quality")
     logger.info(f"Movie selected with ID: {movie_id}")
 
     try:
         movie_details = await fetch_movie_details(movie_id)
-        await send_movie_details(callback_query, movie_details, movie_id, query)
+        await send_movie_details(callback_query, movie_details, movie_id, query, quality)
     except Exception as e:
         logger.error(f"Error in fetching movie details: {e}", exc_info=True)
         await callback_query.message.answer("Failed to retrieve movie details.")
@@ -41,29 +41,29 @@ async def fetch_movie_details(movie_id: str) -> MovieDetails:
 
 
 async def send_movie_details(callback_query: CallbackQuery, movie_details: MovieDetails,
-                             movie_id: Union[int, str], query: str) -> None:
+                             movie_id: Union[int, str], query: str, quality: int) -> None:
     message_caption = format_movie_details_message(movie_details)
     logger.debug(f"Sending movie details: {message_caption}")
 
     qbt_client = await get_client(**QBT_CREDENTIALS)
     categories = await qbt_get_categories(qbt_client)
 
-    reply_markup = create_reply_markup(movie_id, query, categories)
+    reply_markup = create_reply_markup(movie_id, query, categories, quality)
     await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
 
-def create_reply_markup(movie_id: Union[int, str], query: str, categories: list) -> InlineKeyboardMarkup:
+def create_reply_markup(movie_id: Union[int, str], query: str, categories: list, quality: int) -> InlineKeyboardMarkup:
     download_buttons = [
         InlineKeyboardButton(
             text=f"Скачать торрент в {category} 🔽",
-            callback_data=handlers_utils.redis_callback_save(dict(action=DOWNLOAD_TORRENT_CALLBACK, movie_id=movie_id, category=category))
+            callback_data=handlers_utils.redis_callback_save(dict(action=DOWNLOAD_TORRENT_CALLBACK, movie_id=movie_id, category=category, quality=quality, query=query))
         ) for category in categories
     ]
 
     return InlineKeyboardMarkup(inline_keyboard=[
         download_buttons,
         [InlineKeyboardButton(text="Назад к результатам поиска",
-                              callback_data=handlers_utils.redis_callback_save(dict(action=SEARCH_MOVIE_CALLBACK, query=query)))],
+                              callback_data=handlers_utils.redis_callback_save(dict(action=SEARCH_MOVIE_CALLBACK, query=query, quality=quality)))],
         [InlineKeyboardButton(text="Открыть в Кинозале",
                               url=kinozal_utils.get_url(f"/details.php?id={movie_id}"))]
     ])
