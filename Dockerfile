@@ -2,16 +2,14 @@ FROM python:3.12
 
 WORKDIR /usr/src/app
 
-COPY Pipfile ./
-RUN pip install pipenv
-RUN pipenv lock --requirements > requirements.txt
-
-RUN pip install -r requirements.txt
-
 COPY . .
 
-ENV PYTHONPATH=/usr/src/app/src
+RUN pip install pipenv
+
+RUN pipenv install --deploy --ignore-pipfile
 
 WORKDIR /usr/src/app/src
 
-CMD ["python", "bot/main.py"]
+ENV PYTHONPATH=/usr/src/app/src
+
+CMD ["pipenv", "run", "python", "bot/main.py"]
