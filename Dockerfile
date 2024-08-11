@@ -3,12 +3,10 @@ FROM python:3.12
 WORKDIR /usr/src/app
 
 COPY Pipfile ./
-
 RUN pip install pipenv
+RUN pipenv lock --requirements > requirements.txt
 
-RUN pipenv lock --clear
-
-RUN pipenv install --deploy --system
+RUN pip install -r requirements.txt
 
 COPY . .
 
