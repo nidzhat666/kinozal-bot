@@ -56,4 +56,4 @@ jobs:
             echo "REDIS_DB=${{ vars.REDIS_DB }}" >> .env
             echo "PLEX_URL=${{ vars.PLEX_URL }}" >> .env
             echo "PLEX_TOKEN=${{ vars.PLEX_TOKEN }}" >> .env
-            docker-compose up -d
+            docker compose up -d
