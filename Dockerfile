@@ -6,7 +6,9 @@ COPY Pipfile ./
 
 RUN pip install pipenv
 
-RUN pipenv install --deploy
+RUN pipenv lock --clear
+
+RUN pipenv install --deploy --system
 
 COPY . .
 
