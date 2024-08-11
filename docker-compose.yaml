@@ -13,6 +13,7 @@ services:
     image: nidzhat/kinozal_bot:latest
     restart: always
     env_file: .env
+    stdin_open: true # docker run -i
 
 volumes:
   cache:
