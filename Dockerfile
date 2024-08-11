@@ -2,14 +2,16 @@ FROM python:3.12
 
 WORKDIR /usr/src/app
 
-COPY . .
+COPY Pipfile ./
 
 RUN pip install pipenv
 
-RUN pipenv install --deploy --ignore-pipfile
+RUN pipenv install --deploy --system
 
-WORKDIR /usr/src/app/src
+COPY . .
 
 ENV PYTHONPATH=/usr/src/app/src
 
-CMD ["pipenv", "run", "python", "bot/main.py"]
+WORKDIR /usr/src/app/src
+
+CMD ["python", "bot/main.py"]
