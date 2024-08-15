@@ -55,7 +55,7 @@ async def send_movie_details(callback_query: CallbackQuery, movie_details: Movie
 def create_reply_markup(movie_id: Union[int, str], query: str, categories: list, quality: int) -> InlineKeyboardMarkup:
     download_buttons = [
         InlineKeyboardButton(
-            text=f"Скачать торрент в {category} 🔽",
+            text=f"{category} 🔽",
             callback_data=handlers_utils.redis_callback_save(dict(action=DOWNLOAD_TORRENT_CALLBACK, movie_id=movie_id, category=category, quality=quality, query=query))
         ) for category in categories
     ]
