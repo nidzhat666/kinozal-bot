@@ -8,7 +8,12 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 BOT_SERVER_PORT = os.getenv("BOT_SERVER_PORT")
 KINOZAL_CREDENTIALS = dict(username=os.getenv("KINOZAL_USERNAME"),
                            password=os.getenv("KINOZAL_PASSWORD"))
+RUTRACKER_CREDENTIALS = dict(
+    username=os.getenv("RUTRACKER_USERNAME"), password=os.getenv("RUTRACKER_PASSWORD")
+)
 KINOZAL_URL = "kinozal.tv"
+RUTRACKER_URL = "rutracker.org"
+
 QBT_CREDENTIALS = dict(username=os.getenv("QBT_USERNAME"),
                        password=os.getenv("QBT_PASSWORD"))
 QBT_HOST = os.getenv("QBT_HOST")

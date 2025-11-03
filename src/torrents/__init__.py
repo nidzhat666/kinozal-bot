@@ -1,15 +1,16 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from bot.config import KINOZAL_CREDENTIALS
+from bot.config import KINOZAL_CREDENTIALS, RUTRACKER_CREDENTIALS
 
 from torrents.provider_registry import registry
 from torrents.providers import KinozalTorrentProvider
 from torrents.interfaces import TorrentProviderProtocol
+from torrents.providers.rutracker import RutrackerTorrentProvider
 
-
-registry.register(KinozalTorrentProvider(credentials=KINOZAL_CREDENTIALS), default=True)
+registry.register(
+    KinozalTorrentProvider(credentials=KINOZAL_CREDENTIALS), default=True
+)
+registry.register(RutrackerTorrentProvider(credentials=RUTRACKER_CREDENTIALS))
 
 
 def get_torrent_provider(name: str | None = None) -> TorrentProviderProtocol:
