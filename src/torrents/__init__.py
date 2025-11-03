@@ -12,7 +12,7 @@ from torrents.interfaces import TorrentProviderProtocol
 registry.register(KinozalTorrentProvider(credentials=KINOZAL_CREDENTIALS), default=True)
 
 
-def get_torrent_provider(name: Optional[str] = None) -> TorrentProviderProtocol:
+def get_torrent_provider(name: str | None = None) -> TorrentProviderProtocol:
     if name:
         return registry.get(name)
     return registry.get_default()
