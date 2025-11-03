@@ -1,0 +1,18 @@
+[project]
+name = "kinozal-bot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofile>=3.9.0",
+    "aiogram>=3.22.0",
+    "aioqbt>=1.0.0",
+    "beautifulsoup4>=4.14.2",
+    "coloredlogs>=15.0.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-mock>=3.15.1",
+    "python-dotenv>=1.2.1",
+    "redis>=7.0.1",
+]
