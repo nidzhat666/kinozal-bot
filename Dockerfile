@@ -15,4 +15,4 @@ COPY . .
 WORKDIR /usr/src/app/src
 ENV PYTHONPATH=/usr/src/app/src
 
-CMD ["python", "bot/main.py"]
+CMD ["uv", "run", "python", "bot/main.py"]
