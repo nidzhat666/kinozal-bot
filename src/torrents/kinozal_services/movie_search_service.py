@@ -1,15 +1,16 @@
 import aiohttp
 from bs4 import BeautifulSoup
 from services.exceptions import KinozalApiError
+from torrents.interfaces import SearchResult, TorrentSearchServiceProtocol
 from utilities.kinozal_utils import get_url
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class MovieSearchService:
+class MovieSearchService(TorrentSearchServiceProtocol):
 
-    async def search(self, query: str, quality: str | int) -> list[dict]:
+    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
         """
         Search for movies based on a query string.
 
@@ -40,7 +41,7 @@ class MovieSearchService:
             logger.error(error_message)
             raise KinozalApiError(error_message)
 
-    async def _fetch_and_parse(self, session, url, params) -> list[dict]:
+    async def _fetch_and_parse(self, session, url, params) -> list[SearchResult]:
         """
         Fetch search results from the URL and parse them.
 
@@ -66,7 +67,7 @@ class MovieSearchService:
             return self._parse_search_results(response_text)
 
     @staticmethod
-    def _parse_search_results(text) -> list[dict]:
+    def _parse_search_results(text) -> list[SearchResult]:
         """
         Parse the HTML search results into a list of dictionaries.
 
@@ -90,7 +91,7 @@ class MovieSearchService:
                     continue
                 size = el.find_all("td", class_="s")[1]
                 id_ = name.find("a").get("href").split("=")[-1]
-                result.append(dict(name=name.find("a").text, size=size.text, id=id_))
+                result.append(SearchResult(name=name.find("a").text, size=size.text, id=id_))
 
             logger.debug(f"Found results: {len(result)} items")
             return result

@@ -4,12 +4,13 @@ import aiofile
 from aiohttp import ClientSession
 
 from services.exceptions import KinozalApiError
+from torrents.interfaces import DownloadResult, TorrentDownloadServiceProtocol
 from utilities.kinozal_utils import get_url
 
 logger = logging.getLogger(__name__)
 
 
-class MovieDownloadService:
+class MovieDownloadService(TorrentDownloadServiceProtocol):
     def __init__(self, movie_id, auth_cookies: dict):
         self.auth_cookies = auth_cookies
         self.movie_id = movie_id
@@ -24,7 +25,7 @@ class MovieDownloadService:
         path = tempfile.gettempdir()
         return f"{path}/{self.filename}"
 
-    async def download_movie(self) -> dict[str, str]:
+    async def download_movie(self) -> DownloadResult:
         async with ClientSession(cookies=self.auth_cookies) as session:
             async with session.get(self.url) as response:
                 if response.status != 200:
@@ -35,6 +36,5 @@ class MovieDownloadService:
                     raise KinozalApiError("You are not allowed to download this torrent.")
                 async with aiofile.async_open(self.file_path, "wb") as f:
                     await f.write(response_file)
-        return {"file_path": self.file_path,
-                "filename": f"{self.movie_id}.torrent"}
+        return DownloadResult(file_path=self.file_path, filename=f"{self.movie_id}.torrent",)
 
