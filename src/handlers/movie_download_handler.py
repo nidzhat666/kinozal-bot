@@ -5,10 +5,11 @@ from aiogram.types import CallbackQuery
 from bot.constants import TORRENT_DEFAULT_CATEGORY, DOWNLOAD_TORRENT_CALLBACK
 from handlers.torrents_statuses_handler import handle_status_command
 from utilities.handlers_utils import redis_callback_get, check_action
-from torrents.kinozal_services.movie_download_service import MovieDownloadService
-from torrents.kinozal_services.kinozal_auth_service import KinozalAuthService
+from torrents import get_torrent_provider
 from services.qbt_services import get_client, add_torrent
-from bot.config import KINOZAL_CREDENTIALS, QBT_CREDENTIALS
+from bot.config import QBT_CREDENTIALS
+torrent_provider = get_torrent_provider()
+
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
@@ -34,8 +35,11 @@ async def handle_movie_download(callback_query: CallbackQuery):
 
 async def download_movie(movie_id: str) -> dict[str, str]:
     try:
-        auth_service = KinozalAuthService(**KINOZAL_CREDENTIALS)
-        movie_download_service = MovieDownloadService(movie_id, await auth_service.authenticate())
+        auth_service = torrent_provider.get_auth_service()
+        if auth_service is None:
+            raise RuntimeError("Selected torrent provider does not support authenticated downloads.")
+        auth_data = await auth_service.authenticate()
+        movie_download_service = torrent_provider.get_download_service(movie_id, auth_data)
         file_info = await movie_download_service.download_movie()
         logger.info(f"Downloaded movie with ID {movie_id} to path: {file_info}")
         return file_info

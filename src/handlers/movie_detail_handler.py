@@ -8,7 +8,7 @@ from aiogram.utils.text_decorations import html_decoration
 from bot.config import QBT_CREDENTIALS
 from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
 from custom_types.movie_detail_service_types import MovieDetails
-from torrents.kinozal_services.movie_detail_service import MovieDetailService
+from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import kinozal_utils, handlers_utils
 from utilities.handlers_utils import check_action
@@ -16,7 +16,7 @@ from utilities.handlers_utils import check_action
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
 
-movie_detail_service = MovieDetailService()
+torrent_provider = get_torrent_provider()
 
 
 @router.callback_query(lambda c: check_action(c.data, MOVIE_DETAILED_CALLBACK))
@@ -36,7 +36,8 @@ async def handle_movie_selection(callback_query: CallbackQuery):
 
 async def fetch_movie_details(movie_id: str) -> MovieDetails:
     logger.info("Retrieving movie details.")
-    return await movie_detail_service.get_movie_detail(movie_id)
+    detail_service = torrent_provider.get_detail_service()
+    return await detail_service.get_movie_detail(movie_id)
 
 
 async def send_movie_details(callback_query: CallbackQuery, movie_details: MovieDetails,

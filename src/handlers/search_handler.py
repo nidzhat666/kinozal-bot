@@ -4,7 +4,7 @@ from aiogram import Router
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 from bot.constants import MOVIE_DETAILED_CALLBACK, SEARCH_MOVIE_QUALITY_CALLBACK, SEARCH_MOVIE_CALLBACK, KINOZAL_QUALITY_MAP
-from torrents.kinozal_services.movie_search_service import MovieSearchService
+from torrents import get_torrent_provider
 from utilities.handlers_utils import redis_callback_save, redis_callback_get, check_action
 from . import movie_detail_handler
 
@@ -58,7 +58,7 @@ async def perform_search(query: str, quality: str, message: Message, callback_qu
     logger.info(f"Received search command with query: {query} and quality: {quality}")
 
     try:
-        search_service = MovieSearchService()
+        search_service = get_torrent_provider().get_search_service()
         results = await search_service.search(query, quality)
         logger.info(f"Search completed with {len(results)} results.")
     except Exception as e:
