@@ -21,39 +21,4 @@ jobs:
           docker build -t ${{ secrets.DOCKER_HUB_REPO }}:latest .
           echo ${{ secrets.DOCKER_HUB_PASSWORD }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
           docker push ${{ secrets.DOCKER_HUB_REPO }}:latest
-  
 
-  server-deploy:
-    needs:
-      - docker-image-build
-    runs-on: ubuntu-latest
-    environment: master
-    steps:
-      - name: SSH and Deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            REPO_DIR=~/kinozal-bot/
-            GITHUB_REPO=https://nidzhat666:${{ secrets.GITHUB_TOKEN }}@github.com/nidzhat666/kinozal-bot.git
-            cd $REPO_DIR && git pull $GITHUB_REPO master
-            docker pull ${{ secrets.DOCKER_HUB_REPO }}:latest
-            rm -rf .env
-            touch .env
-            echo "Environment variables env: ${{env}}"
-            echo "Environment variables vars: ${{vars}}"
-            echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}" >> .env
-            echo "KINOZAL_USERNAME=${{ secrets.KINOZAL_USERNAME }}" >> .env
-            echo "KINOZAL_PASSWORD=${{ secrets.KINOZAL_PASSWORD }}" >> .env
-            echo "QBT_HOST=${{ vars.QBT_HOST }}" >> .env
-            echo "QBT_USERNAME=${{ secrets.QBT_USERNAME }}" >> .env
-            echo "QBT_PASSWORD=${{ secrets.QBT_PASSWORD }}" >> .env
-            echo "QBT_PORT=${{ vars.QBT_PORT }}" >> .env
-            echo "REDIS_HOST=${{ vars.REDIS_HOST }}" >> .env
-            echo "REDIS_PORT=${{ vars.REDIS_PORT }}" >> .env
-            echo "REDIS_DB=${{ vars.REDIS_DB }}" >> .env
-            echo "PLEX_URL=${{ vars.PLEX_URL }}" >> .env
-            echo "PLEX_TOKEN=${{ vars.PLEX_TOKEN }}" >> .env
-            docker compose up -d
