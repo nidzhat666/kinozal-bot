@@ -1,22 +1,24 @@
-from typing import TypedDict, List, Tuple, Optional
+from typing import Optional
+
+from pydantic import BaseModel
 
 
-class MovieRatings(TypedDict, total=False):
-    imdb: str
-    kinopoisk: str
+class MovieRatings(BaseModel):
+    imdb: str = "-"
+    kinopoisk: str = "-"
 
 
-class TorrentDetails(TypedDict):
+class TorrentDetails(BaseModel):
     key: str
-    value: Optional[str]
+    value: str | None = None
 
 
-class MovieDetails(TypedDict):
+class MovieDetails(BaseModel):
     name: str
     year: str
-    genres: str
+    genres: list[str]
     director: str
-    actors: List[str]
+    actors: list[str]
     image_url: str
     ratings: MovieRatings
-    torrent_details: List[Tuple[str, Optional[str]]]
+    torrent_details: list[TorrentDetails]

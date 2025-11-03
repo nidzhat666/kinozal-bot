@@ -41,7 +41,7 @@ async def fetch_movie_details(movie_id: str) -> MovieDetails:
 
 
 async def send_movie_details(callback_query: CallbackQuery, movie_details: MovieDetails,
-                             movie_id: Union[int, str], query: str, quality: int) -> None:
+                             movie_id: int | str, query: str, quality: int) -> None:
     message_caption = format_movie_details_message(movie_details)
     logger.debug(f"Sending movie details: {message_caption}")
 
@@ -52,7 +52,7 @@ async def send_movie_details(callback_query: CallbackQuery, movie_details: Movie
     await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
 
-def create_reply_markup(movie_id: Union[int, str], query: str, categories: list, quality: int) -> InlineKeyboardMarkup:
+def create_reply_markup(movie_id: int | str, query: str, categories: list, quality: int) -> InlineKeyboardMarkup:
     download_buttons = [
         InlineKeyboardButton(
             text=f"{category} 🔽",
@@ -71,17 +71,20 @@ def create_reply_markup(movie_id: Union[int, str], query: str, categories: list,
 
 def format_movie_details_message(movie_details: MovieDetails) -> str:
     formatted_message = (
-        f"{html_decoration.bold('Название')}: {movie_details['name']}\n"
-        f"{html_decoration.bold('Год')}: {movie_details['year']}\n"
-        f"{html_decoration.bold('Жанр')}: {', '.join(movie_details['genres'])}\n"
-        f"{html_decoration.bold('Режисер')}: {movie_details['director']}\n"
-        f"{html_decoration.bold('Актеры')}: {', '.join(movie_details['actors'][:5])}\n\n"
+        f"{html_decoration.bold('Название')}: {movie_details.name}\n"
+        f"{html_decoration.bold('Год')}: {movie_details.year}\n"
+        f"{html_decoration.bold('Жанр')}: {', '.join(movie_details.genres)}\n"
+        f"{html_decoration.bold('Режисер')}: {movie_details.director}\n"
+        f"{html_decoration.bold('Актеры')}: {', '.join(movie_details.actors[:5])}\n\n"
         f"{html_decoration.bold('Рейтинги')}:\n"
-        f"- IMDB: {html_decoration.code(movie_details['ratings']['imdb'])}\n"
-        f"- Kinopoisk: {html_decoration.code(movie_details['ratings']['kinopoisk'])}\n\n"
+        f"- IMDB: {html_decoration.code(movie_details.ratings.imdb)}\n"
+        f"- Kinopoisk: {html_decoration.code(movie_details.ratings.kinopoisk)}\n\n"
         f"<b>Torrent Details</b>:\n"
     )
-    for k, v in movie_details["torrent_details"]:
-        formatted_message += f"- {html_decoration.bold(k)} {html_decoration.code(v)}\n"
+    for detail in movie_details.torrent_details:
+        value = detail.value or "-"
+        formatted_message += (
+            f"- {html_decoration.bold(detail.key)} {html_decoration.code(value)}\n"
+        )
 
     return formatted_message
