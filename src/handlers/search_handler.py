@@ -4,7 +4,7 @@ from aiogram import Router
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 from bot.constants import MOVIE_DETAILED_CALLBACK, SEARCH_MOVIE_QUALITY_CALLBACK, SEARCH_MOVIE_CALLBACK, KINOZAL_QUALITY_MAP
-from services.kinozal_services.movie_search_service import MovieSearchService
+from torrents.kinozal_services.movie_search_service import MovieSearchService
 from utilities.handlers_utils import redis_callback_save, redis_callback_get, check_action
 from . import movie_detail_handler
 
