@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, TypedDict, runtime_checkable
 
-from custom_types.movie_detail_service_types import MovieDetails
+from custom_types.movie_detail_service_types import MovieDetails, MovieSearchResult
 
 
 class DownloadResult(TypedDict):
@@ -10,15 +10,9 @@ class DownloadResult(TypedDict):
     filename: str
 
 
-class SearchResult(TypedDict, total=False):
-    id: str
-    name: str
-    size: str
-
-
 @runtime_checkable
 class TorrentSearchServiceProtocol(Protocol):
-    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
+    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
         """Search for torrents by query and quality."""
 
 
@@ -38,7 +32,7 @@ class TorrentDownloadServiceProtocol(Protocol):
 class TorrentProviderProtocol(Protocol):
     name: str
 
-    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
+    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
         """Search for torrents by query and quality."""
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:

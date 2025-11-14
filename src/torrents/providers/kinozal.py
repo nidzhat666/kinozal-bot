@@ -1,29 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import tempfile
-from multiprocessing import AuthenticationError
+from dataclasses import dataclass
+from pathlib import Path
+from time import perf_counter
 
 import aiofile
 import aiohttp
-from aiohttp import ClientSession
 from bs4 import BeautifulSoup
 from yarl import URL
 
 from custom_types.movie_detail_service_types import (
     MovieDetails,
     MovieRatings,
+    MovieSearchResult,
     TorrentDetails,
 )
 from services.exceptions import KinozalApiError
-from torrents.interfaces import (
-    DownloadResult,
-    SearchResult,
-    TorrentDetailServiceProtocol,
-    TorrentDownloadServiceProtocol,
-    TorrentProviderProtocol,
-    TorrentSearchServiceProtocol,
-)
+from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities import kinozal_utils
 from utilities.kinozal_utils import get_url
 
@@ -31,294 +27,308 @@ from utilities.kinozal_utils import get_url
 logger = logging.getLogger(__name__)
 
 
-class MovieSearchService(TorrentSearchServiceProtocol):
-    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
-        url = get_url("/browse.php")
-        params = {"s": query, "v": quality, "t": 1, "g": 3}
-        logger.debug("Initiating search for query: %s", query)
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                return await self._fetch_and_parse(session, url, params)
-        except aiohttp.ClientError as exc:
-            error_message = f"HTTP client error during search: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
-        except Exception as exc:  # noqa: BLE001 - re-raise as domain error
-            error_message = f"Unexpected error during search: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
-
-    async def _fetch_and_parse(
-        self,
-        session: aiohttp.ClientSession,
-        url: str,
-        params: dict[str, str | int],
-    ) -> list[SearchResult]:
-        async with session.get(url, params=params) as response:
-            logger.debug("Request URL: %s", response.url)
-            if response.status != 200:
-                error_message = (
-                    "Search request failed with status code: %s" % response.status
-                )
-                logger.error(error_message)
-                raise KinozalApiError(error_message)
-
-            response_text = await response.text()
-            return self._parse_search_results(response_text)
-
-    @staticmethod
-    def _parse_search_results(text: str) -> list[SearchResult]:
-        try:
-            soup = BeautifulSoup(text, features="html.parser")
-            results_list = soup.find_all("tr", class_="bg")
-            result: list[SearchResult] = []
-
-            for el in results_list:
-                name = el.find("td", class_="nam")
-                if name is None:
-                    continue
-                size_cells = el.find_all("td", class_="s")
-                if len(size_cells) < 2:
-                    logger.debug("Skipping malformed search result row: %s", el)
-                    continue
-                size = size_cells[1]
-                id_ = name.find("a").get("href").split("=")[-1]
-                result.append(
-                    SearchResult(name=name.find("a").text, size=size.text, id=id_)
-                )
-
-            logger.debug("Found results: %d items", len(result))
-            return result
-        except Exception as exc:  # noqa: BLE001 - re-raise as domain error
-            error_message = f"Error parsing search results: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
+@dataclass(slots=True)
+class _RawSearchItem:
+    movie_id: str
+    title: str
+    size: str
 
 
-class MovieDownloadService(TorrentDownloadServiceProtocol):
-    def __init__(
-        self,
-        movie_id: int | str,
-        credentials: dict[str, str] | None = None,
-    ) -> None:
-        self.credentials = credentials or {}
-        self.movie_id = movie_id
-        self.url = get_url(f"/download.php?id={self.movie_id}")
+async def _search_movies(query: str, quality: str | int) -> list[MovieSearchResult]:
+    started_at = perf_counter()
+    logger.debug("Starting Kinozal search for query '%s' (quality=%s)", query, quality)
 
-    @property
-    def filename(self) -> str:
-        return f"{self.movie_id}.torrent"
+    raw_items = await _fetch_search_items(query, quality)
+    if not raw_items:
+        _log_search_duration(query, quality, 0, started_at)
+        return []
 
-    @property
-    def file_path(self) -> str:
-        path = tempfile.gettempdir()
-        return f"{path}/{self.filename}"
+    enriched_results = await asyncio.gather(
+        *(_build_movie_search_result(item) for item in raw_items),
+        return_exceptions=True,
+    )
 
-    async def download_movie(self) -> DownloadResult:
-        auth_cookies = await self._authenticate()
-        async with ClientSession(cookies=auth_cookies) as session:
-            async with session.get(self.url) as response:
+    movies: list[MovieSearchResult] = []
+    for item, result in zip(raw_items, enriched_results):
+        if isinstance(result, Exception):
+            logger.error(
+                "Failed to enrich search result for id %s: %s",
+                item.movie_id,
+                result,
+            )
+            continue
+        movies.append(result)
+
+    _log_search_duration(query, quality, len(movies), started_at)
+    return movies
+
+
+async def _fetch_search_items(query: str, quality: str | int) -> list[_RawSearchItem]:
+    params = {"s": query, "v": quality, "t": 1, "g": 3}
+    html = await _get_text("/browse.php", params=params)
+    return _parse_search_results(html)
+
+
+async def _build_movie_search_result(item: _RawSearchItem) -> MovieSearchResult:
+    details = await _fetch_movie_details(item.movie_id)
+    return MovieSearchResult.from_search_data(
+        search_id=item.movie_id,
+        size=item.size,
+        search_name=item.title,
+        details=details,
+    )
+
+
+async def _fetch_movie_details(movie_id: int | str) -> MovieDetails:
+    logger.debug("Fetching movie details for Kinozal id %s", movie_id)
+    html = await _get_text("/details.php", params={"id": movie_id})
+    return _parse_movie_details(html)
+
+
+async def _get_text(
+    path: str, *, params: dict[str, str | int] | None = None
+) -> str:
+    url = get_url(path)
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                logger.debug("GET %s -> %s", response.url, response.status)
                 if response.status != 200:
                     raise KinozalApiError(
-                        "Failed to download movie with status code: %s"
-                        % response.status
+                        f"Kinozal request to {response.url} failed with status {response.status}."
                     )
-                response_file = await response.read()
-                if "pay.php" in str(response_file):
-                    raise KinozalApiError(
-                        "You are not allowed to download this torrent."
-                    )
-                async with aiofile.async_open(self.file_path, "wb") as file_handle:
-                    await file_handle.write(response_file)
-        return DownloadResult(file_path=self.file_path, filename=self.filename)
-
-    async def _authenticate(self) -> dict[str, str]:
-        username = self.credentials.get("username")
-        password = self.credentials.get("password")
-
-        if not username or not password:
-            raise KinozalApiError(
-                "Kinozal download requires username and password credentials."
-            )
-
-        auth_service = KinozalAuthService(username=username, password=password)
-        try:
-            return await auth_service.authenticate()
-        except AuthenticationError as exc:
-            error_message = f"Authentication failed for Kinozal download: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
-
-
-class MovieDetailService:
-    def __init__(self) -> None:
-        self.base_url = get_url("/details.php")
-
-    async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
-        params = {"id": movie_id}
-        response_text = await self._fetch_movie_data(params)
-        movie = self._parse_movie_details(response_text)
-        logger.debug("Retrieved movie details: %s", movie)
-        return movie
-
-    async def _fetch_movie_data(self, params: dict[str, str | int]) -> str:
-        async with aiohttp.ClientSession() as session:
-            try:
-                response = await session.get(self.base_url, params=params)
-                response.raise_for_status()
                 return await response.text()
-            except aiohttp.ClientError as exc:
-                error_message = f"HTTP client error during movie retrieve: {exc}"
-                logger.error(error_message)
-                raise KinozalApiError(error_message) from exc
-
-    @staticmethod
-    def _parse_movie_details(html_text: str) -> MovieDetails:
-        try:
-            soup = BeautifulSoup(html_text, features="html.parser")
-            return MovieDetailParser.parse(soup)
-        except Exception as exc:  # noqa: BLE001 - re-raise as domain error
-            error_message = f"Error parsing movie detail results: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
+    except aiohttp.ClientError as exc:
+        error_message = f"HTTP client error while requesting {url}: {exc}"
+        logger.error(error_message)
+        raise KinozalApiError(error_message) from exc
 
 
-class MovieDetailParser:
-    @classmethod
-    def parse(cls, soup: BeautifulSoup) -> MovieDetails:
-        try:
-            return MovieDetails(
-                name=cls._parse_name(soup),
-                year=cls._parse_year(soup),
-                genres=cls._parse_genres(soup),
-                director=cls._parse_director(soup),
-                actors=cls._parse_actors(soup),
-                image_url=cls._parse_image_url(soup),
-                ratings=cls._parse_ratings(soup),
-                torrent_details=cls._parse_torrent_details(soup),
+def _parse_search_results(html: str) -> list[_RawSearchItem]:
+    soup = BeautifulSoup(html, "html.parser")
+    results: list[_RawSearchItem] = []
+
+    for row in soup.find_all("tr", class_="bg"):
+        name_cell = row.find("td", class_="nam")
+        if name_cell is None:
+            continue
+        link = name_cell.find("a")
+        if link is None:
+            continue
+        size_cells = row.find_all("td", class_="s")
+        if len(size_cells) < 2:
+            continue
+
+        movie_id = link.get("href", "").split("=")[-1]
+        if not movie_id:
+            continue
+
+        results.append(
+            _RawSearchItem(
+                movie_id=movie_id,
+                title=link.text.strip(),
+                size=size_cells[1].text.strip(),
             )
-        except Exception as exc:  # noqa: BLE001 - re-raise as domain error
-            error_message = f"Error parsing movie detail results: {exc}"
-            logger.error(error_message)
-            raise KinozalApiError(error_message) from exc
-
-    @staticmethod
-    def _parse_name(soup: BeautifulSoup) -> str:
-        return soup.find("h1").find("a").text
-
-    @staticmethod
-    def _parse_year(soup: BeautifulSoup) -> str:
-        year_tag = soup.find(lambda tag: tag.name == "b" and "Год выпуска:" in tag.text)
-        return year_tag.next_sibling.strip() if year_tag else ""
-
-    @staticmethod
-    def _parse_genres(soup: BeautifulSoup) -> list[str]:
-        genre_tag = soup.find(lambda tag: tag.name == "b" and "Жанр:" in tag.text)
-        if not genre_tag:
-            return []
-        result = genre_tag.find_next_sibling("span").text.split(", ")
-        logger.debug("Retrieved genres: %s", result)
-        return result
-
-    @staticmethod
-    def _parse_director(soup: BeautifulSoup) -> str:
-        director_tag = soup.find(lambda tag: tag.name == "b" and "Режиссер:" in tag.text)
-        return (
-            director_tag.find_next_sibling("span").get_text(strip=True)
-            if director_tag
-            else ""
         )
 
-    @staticmethod
-    def _parse_actors(soup: BeautifulSoup) -> list[str]:
-        actors_tag = soup.find(lambda tag: tag.name == "b" and "В ролях:" in tag.text)
-        if not actors_tag:
-            return []
-        result = actors_tag.find_next_sibling("span").text.split(", ")
-        logger.debug("Retrieved actors: %s", result)
-        return result
+    logger.debug("Parsed %d Kinozal search results", len(results))
+    return results
 
-    @staticmethod
-    def _parse_image_url(soup: BeautifulSoup) -> str:
-        image_tag = soup.find("img", class_="p200")
-        return get_url(image_tag["src"]) if image_tag else ""
 
-    @staticmethod
-    def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
-        imdb_rating = soup.find("a", href=lambda href: href and "imdb.com" in href)
-        if imdb_rating:
-            imdb_rating = imdb_rating.find("span").text
-        else:
-            imdb_rating = "-"
-
-        kinopoisk_rating = soup.find(
-            "a", href=lambda href: href and "kinopoisk.ru" in href
+def _parse_movie_details(html: str) -> MovieDetails:
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        return MovieDetails(
+            name=_parse_name(soup),
+            year=_parse_year(soup),
+            genres=_parse_genres(soup),
+            director=_parse_director(soup),
+            actors=_parse_actors(soup),
+            image_url=_parse_image_url(soup),
+            ratings=_parse_ratings(soup),
+            torrent_details=_parse_torrent_details(soup),
         )
-        if kinopoisk_rating:
-            kinopoisk_rating = kinopoisk_rating.find("span").text
+    except Exception as exc:  # noqa: BLE001
+        error_message = f"Error parsing Kinozal movie detail results: {exc}"
+        logger.error(error_message)
+        raise KinozalApiError(error_message) from exc
+
+
+def _parse_name(soup: BeautifulSoup) -> str:
+    title_tag = soup.find("h1")
+    if not title_tag:
+        return ""
+    link = title_tag.find("a")
+    if link:
+        return link.get_text(strip=True)
+    return title_tag.get_text(strip=True)
+
+
+def _parse_year(soup: BeautifulSoup) -> str:
+    tag = _find_metadata_tag(soup, "Год выпуска:")
+    sibling = getattr(tag, "next_sibling", "") if tag else ""
+    return sibling.strip() if isinstance(sibling, str) else ""
+
+
+def _parse_genres(soup: BeautifulSoup) -> list[str]:
+    text = _extract_span_text(soup, "Жанр:")
+    return [item.strip() for item in text.split(",")] if text else []
+
+
+def _parse_director(soup: BeautifulSoup) -> str:
+    return _extract_span_text(soup, "Режиссер:")
+
+
+def _parse_actors(soup: BeautifulSoup) -> list[str]:
+    text = _extract_span_text(soup, "В ролях:")
+    return [item.strip() for item in text.split(",")] if text else []
+
+
+def _parse_image_url(soup: BeautifulSoup) -> str:
+    image_tag = soup.find("img", class_="p200")
+    if not image_tag:
+        return ""
+    src = image_tag.get("src")
+    return get_url(src) if src else ""
+
+
+def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
+    imdb_anchor = soup.find("a", href=lambda href: href and "imdb.com" in href)
+    imdb_value = (
+        imdb_anchor.find("span").get_text(strip=True) if imdb_anchor and imdb_anchor.find("span") else "-"
+    )
+
+    kinopoisk_anchor = soup.find("a", href=lambda href: href and "kinopoisk.ru" in href)
+    kinopoisk_value = (
+        kinopoisk_anchor.find("span").get_text(strip=True)
+        if kinopoisk_anchor and kinopoisk_anchor.find("span")
+        else "-"
+    )
+
+    return MovieRatings(imdb=imdb_value, kinopoisk=kinopoisk_value)
+
+
+def _parse_torrent_details(soup: BeautifulSoup) -> list[TorrentDetails]:
+    tab_div = soup.find("div", {"id": "tabs"})
+    if not tab_div:
+        return []
+
+    details: list[TorrentDetails] = []
+    for bold in tab_div.find_all("b"):
+        key = bold.get_text(strip=True)
+        value_node = bold.next_sibling
+        if value_node is None:
+            value_text = None
+        elif hasattr(value_node, "get_text"):
+            value_text = value_node.get_text(strip=True)
         else:
-            kinopoisk_rating = "-"
+            value_text = str(value_node).strip()
 
-        return MovieRatings(imdb=imdb_rating, kinopoisk=kinopoisk_rating)
+        if value_text == "":
+            value_text = None
 
-    @staticmethod
-    def _parse_torrent_details(soup: BeautifulSoup) -> list[TorrentDetails]:
-        video_details: list[TorrentDetails] = []
-        tab_div = soup.find("div", {"id": "tabs"})
-        if not tab_div:
-            return video_details
+        details.append(TorrentDetails(key=key, value=value_text))
 
-        for b_tag in tab_div.find_all("b"):
-            key = b_tag.get_text(strip=True)
-            value_node = b_tag.next_sibling
-            if value_node is None:
-                value_text = None
-            elif hasattr(value_node, "get_text"):
-                value_text = value_node.get_text(strip=True)
-            else:
-                value_text = str(value_node).strip()
-
-            if value_text == "":
-                value_text = None
-
-            video_details.append(TorrentDetails(key=key, value=value_text))
-
-        return video_details
+    return details
 
 
-class KinozalAuthService:
-    def __init__(self, username: str, password: str) -> None:
-        self.username = username
-        self.password = password
+def _find_metadata_tag(soup: BeautifulSoup, label: str):
+    return soup.find(lambda tag: tag.name == "b" and label in tag.text)
 
-    async def authenticate(self) -> dict[str, str]:
-        url = kinozal_utils.get_url("/takelogin.php")
-        data = {"username": self.username, "password": self.password}
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, data=data, headers=headers) as response:
-                    if response.status != 200:
-                        error_message = (
-                            "Authentication failed with status code: %s"
-                            % response.status
-                        )
-                        logger.error(error_message)
-                        raise AuthenticationError(error_message)
-                    kinozal_url = URL(kinozal_utils.get_url())
-                    cookies = session.cookie_jar.filter_cookies(kinozal_url)
-                    uid = cookies["uid"].value
-                    pass_ = cookies["pass"].value
-                    return {"uid": uid, "pass": pass_}
-        except aiohttp.ClientError as exc:
-            error_message = f"HTTP client error during authentication: {exc}"
-            logger.error(error_message)
-            raise AuthenticationError(error_message) from exc
-        except Exception as exc:  # noqa: BLE001 - re-raise as auth error
-            error_message = f"Unexpected error during authentication: {exc}"
-            logger.error(error_message)
-            raise AuthenticationError(error_message) from exc
+
+def _extract_span_text(soup: BeautifulSoup, label: str) -> str:
+    tag = _find_metadata_tag(soup, label)
+    if not tag:
+        return ""
+    span = tag.find_next_sibling("span")
+    if span:
+        return span.get_text(strip=True)
+    sibling = getattr(tag, "next_sibling", "")
+    return sibling.strip() if isinstance(sibling, str) else ""
+
+
+def _log_search_duration(
+    query: str,
+    quality: str | int,
+    result_count: int,
+    started_at: float,
+) -> None:
+    duration = perf_counter() - started_at
+    logger.info(
+        "Search completed for query '%s' (quality=%s) with %d results in %.2fs",
+        query,
+        quality,
+        result_count,
+        duration,
+    )
+
+
+async def _download_movie(
+    movie_id: int | str,
+    credentials: dict[str, str],
+) -> DownloadResult:
+    logger.debug("Downloading Kinozal torrent for movie id %s", movie_id)
+    cookies = await _authenticate(credentials)
+    url = get_url(f"/download.php?id={movie_id}")
+
+    try:
+        async with aiohttp.ClientSession(cookies=cookies) as session:
+            async with session.get(url) as response:
+                logger.debug("GET %s -> %s", response.url, response.status)
+                if response.status != 200:
+                    raise KinozalApiError(
+                        f"Failed to download movie {movie_id}: HTTP {response.status}."
+                    )
+                payload = await response.read()
+    except aiohttp.ClientError as exc:
+        error_message = f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
+        logger.error(error_message)
+        raise KinozalApiError(error_message) from exc
+
+    if b"pay.php" in payload:
+        raise KinozalApiError("You are not allowed to download this torrent.")
+
+    target = Path(tempfile.gettempdir()) / f"{movie_id}.torrent"
+    async with aiofile.async_open(target, "wb") as file_handle:
+        await file_handle.write(payload)
+
+    logger.info("Torrent file for movie %s saved to %s", movie_id, target)
+    return DownloadResult(file_path=str(target), filename=target.name)
+
+
+async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+    username = credentials.get("username")
+    password = credentials.get("password")
+    if not username or not password:
+        raise KinozalApiError(
+            "Kinozal download requires username and password credentials."
+        )
+
+    url = kinozal_utils.get_url("/takelogin.php")
+    data = {"username": username, "password": password}
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=data, headers=headers) as response:
+                logger.debug("POST %s -> %s", response.url, response.status)
+                if response.status != 200:
+                    raise KinozalApiError(
+                        f"Kinozal authentication failed with status {response.status}."
+                    )
+            kinozal_url = URL(kinozal_utils.get_url())
+            cookies = session.cookie_jar.filter_cookies(kinozal_url)
+    except aiohttp.ClientError as exc:
+        error_message = f"HTTP client error during Kinozal authentication: {exc}"
+        logger.error(error_message)
+        raise KinozalApiError(error_message) from exc
+
+    uid_cookie = cookies.get("uid")
+    pass_cookie = cookies.get("pass")
+    if not uid_cookie or not pass_cookie:
+        raise KinozalApiError("Kinozal authentication cookies are missing.")
+
+    return {"uid": uid_cookie.value, "pass": pass_cookie.value}
 
 
 class KinozalTorrentProvider(TorrentProviderProtocol):
@@ -326,20 +336,13 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
 
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
-        self._search_service: TorrentSearchServiceProtocol = MovieSearchService()
-        self._detail_service: TorrentDetailServiceProtocol = MovieDetailService()
 
-    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
-        return await self._search_service.search(query, quality)
+    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
+        return await _search_movies(query, quality)
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
-        return await self._detail_service.get_movie_detail(movie_id)
+        return await _fetch_movie_details(movie_id)
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
-        download_service = MovieDownloadService(
-            movie_id=movie_id,
-            credentials=self._credentials,
-        )
-        return await download_service.download_movie()
-
+        return await _download_movie(movie_id, self._credentials)
 

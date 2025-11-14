@@ -3,7 +3,8 @@ import httpx
 from bot.config import RUTRACKER_URL
 from services.exceptions import RutrackerApiError
 from custom_types.movie_detail_service_types import MovieDetails
-from torrents.interfaces import DownloadResult, SearchResult, TorrentProviderProtocol
+from torrents.interfaces import DownloadResult, TorrentProviderProtocol
+from custom_types.movie_detail_service_types import MovieSearchResult
 
 def get_url(path: str = "") -> str:
     return f"https://{RUTRACKER_URL}{path}"
@@ -34,7 +35,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
 
-    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
+    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
         raise NotImplementedError
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:

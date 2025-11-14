@@ -7,11 +7,12 @@ from aiogram.utils.text_decorations import html_decoration
 
 from bot.config import QBT_CREDENTIALS
 from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
-from custom_types.movie_detail_service_types import MovieDetails
+from custom_types.movie_detail_service_types import MovieDetails, MovieSearchResult
 from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import kinozal_utils, handlers_utils
 from utilities.handlers_utils import check_action
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
@@ -26,7 +27,21 @@ async def handle_movie_selection(callback_query: CallbackQuery):
     logger.info(f"Movie selected with ID: {movie_id}")
 
     try:
-        movie_details = await fetch_movie_details(movie_id)
+        movie_details_data = callback_data.get("movie_details")
+        if movie_details_data:
+            try:
+                movie_details = MovieSearchResult.model_validate(movie_details_data)
+                logger.info("Using cached movie details for movie ID: %s", movie_id)
+            except ValidationError as exc:
+                logger.warning(
+                    "Failed to use cached movie details for ID %s: %s. Refetching.",
+                    movie_id,
+                    exc,
+                )
+                movie_details = await fetch_movie_details(movie_id)
+        else:
+            movie_details = await fetch_movie_details(movie_id)
+            logger.info("Movie details fetched for movie ID: %s", movie_id)
         await send_movie_details(callback_query, movie_details, movie_id, query, quality)
     except Exception as e:
         logger.error(f"Error in fetching movie details: {e}", exc_info=True)

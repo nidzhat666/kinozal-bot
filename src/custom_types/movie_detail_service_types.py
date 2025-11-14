@@ -1,6 +1,4 @@
-from typing import Optional
-
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MovieRatings(BaseModel):
@@ -22,3 +20,26 @@ class MovieDetails(BaseModel):
     image_url: str
     ratings: MovieRatings
     torrent_details: list[TorrentDetails]
+
+
+class MovieSearchResult(MovieDetails):
+    model_config = ConfigDict(populate_by_name=True)
+    id: str = Field(alias="movie_id")
+    size: str
+    search_name: str | None = None
+
+    @classmethod
+    def from_search_data(
+        cls,
+        *,
+        search_id: str,
+        size: str,
+        search_name: str,
+        details: MovieDetails,
+    ) -> "MovieSearchResult":
+        return cls(
+            movie_id=str(search_id),
+            size=size,
+            search_name=search_name,
+            **details.model_dump(),
+        )

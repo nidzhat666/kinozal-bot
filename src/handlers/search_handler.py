@@ -1,11 +1,17 @@
 import logging
 
 from aiogram import Router
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
-from bot.constants import MOVIE_DETAILED_CALLBACK, SEARCH_MOVIE_QUALITY_CALLBACK, SEARCH_MOVIE_CALLBACK, KINOZAL_QUALITY_MAP
+from bot.constants import KINOZAL_QUALITY_MAP, MOVIE_DETAILED_CALLBACK, SEARCH_MOVIE_CALLBACK, SEARCH_MOVIE_QUALITY_CALLBACK
+from custom_types.movie_detail_service_types import MovieSearchResult
 from torrents import get_torrent_provider
-from utilities.handlers_utils import redis_callback_save, redis_callback_get, check_action
+from utilities.handlers_utils import check_action, redis_callback_get, redis_callback_save
 from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
@@ -54,7 +60,12 @@ async def handle_search_after_quality(callback_query: CallbackQuery):
         await callback_query.answer("Error retrieving quality data.", show_alert=True)
 
 
-async def perform_search(query: str, quality: str, message: Message, callback_query: CallbackQuery = None):
+async def perform_search(
+    query: str,
+    quality: str | int,
+    message: Message,
+    callback_query: CallbackQuery = None,
+):
     logger.info(f"Received search command with query: {query} and quality: {quality}")
 
     try:
@@ -78,13 +89,25 @@ async def perform_search(query: str, quality: str, message: Message, callback_qu
         await message.answer("Error in processing search results.")
 
 
-def format_search_results(results: list[dict], query, quality) -> InlineKeyboardMarkup:
-    buttons = []
-    for el in results[:10]:
-        txt = el.get("name").split(" / ")
-        button_text = " | ".join([txt[0], txt[-1]]) + f" ({el.get('size')})"
-        movie_details_uuid = redis_callback_save({"action": MOVIE_DETAILED_CALLBACK, "movie_id": el.get("id"),
-                                                  "query": query, "quality": quality})
+def format_search_results(
+    results: list[MovieSearchResult], query: str, quality: str | int
+) -> InlineKeyboardMarkup:
+    buttons: list[list[InlineKeyboardButton]] = []
+    for result in results[:10]:
+        title_source = result.search_name or result.name
+        title_parts = title_source.split(" / ")
+        if len(title_parts) > 1:
+            button_label = " | ".join([title_parts[0], title_parts[-1]])
+        else:
+            button_label = title_source
+        button_text = f"{button_label} ({result.size})"
+        movie_details_uuid = redis_callback_save({
+            "action": MOVIE_DETAILED_CALLBACK,
+            "movie_id": result.id,
+            "query": query,
+            "quality": quality,
+            "movie_details": result.model_dump(mode="json", by_alias=True, exclude_none=True),
+        })
         buttons.append([InlineKeyboardButton(text=button_text, callback_data=movie_details_uuid)])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
