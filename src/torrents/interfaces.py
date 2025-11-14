@@ -17,12 +17,6 @@ class SearchResult(TypedDict, total=False):
 
 
 @runtime_checkable
-class TorrentAuthServiceProtocol(Protocol):
-    async def authenticate(self) -> dict[str, str]:
-        """Return auth data that can be used by download services."""
-
-
-@runtime_checkable
 class TorrentSearchServiceProtocol(Protocol):
     async def search(self, query: str, quality: str | int) -> list[SearchResult]:
         """Search for torrents by query and quality."""
@@ -44,18 +38,13 @@ class TorrentDownloadServiceProtocol(Protocol):
 class TorrentProviderProtocol(Protocol):
     name: str
 
-    def get_auth_service(self) -> TorrentAuthServiceProtocol | None:
-        """Return an auth service for the provider or None if not required."""
+    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
+        """Search for torrents by query and quality."""
 
-    def get_search_service(self) -> TorrentSearchServiceProtocol:
-        """Return a search service instance for the provider."""
+    async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
+        """Fetch detailed information about the movie or torrent item."""
 
-    def get_detail_service(self) -> TorrentDetailServiceProtocol:
-        """Return a detail service instance for the provider."""
-
-    def get_download_service(
-        self, movie_id: int | str, auth_data: dict[str, str] | None = None
-    ) -> TorrentDownloadServiceProtocol:
-        """Return a download service instance for the provider."""
+    async def download_movie(self, movie_id: int | str) -> DownloadResult:
+        """Download the torrent file and return its metadata."""
 
 

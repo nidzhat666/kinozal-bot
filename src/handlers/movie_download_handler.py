@@ -35,12 +35,7 @@ async def handle_movie_download(callback_query: CallbackQuery):
 
 async def download_movie(movie_id: str) -> dict[str, str]:
     try:
-        auth_service = torrent_provider.get_auth_service()
-        if auth_service is None:
-            raise RuntimeError("Selected torrent provider does not support authenticated downloads.")
-        auth_data = await auth_service.authenticate()
-        movie_download_service = torrent_provider.get_download_service(movie_id, auth_data)
-        file_info = await movie_download_service.download_movie()
+        file_info = await torrent_provider.download_movie(movie_id)
         logger.info(f"Downloaded movie with ID {movie_id} to path: {file_info}")
         return file_info
     except Exception as e:

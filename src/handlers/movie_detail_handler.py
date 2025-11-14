@@ -36,8 +36,7 @@ async def handle_movie_selection(callback_query: CallbackQuery):
 
 async def fetch_movie_details(movie_id: str) -> MovieDetails:
     logger.info("Retrieving movie details.")
-    detail_service = torrent_provider.get_detail_service()
-    return await detail_service.get_movie_detail(movie_id)
+    return await torrent_provider.get_movie_detail(movie_id)
 
 
 async def send_movie_details(callback_query: CallbackQuery, movie_details: MovieDetails,

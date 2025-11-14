@@ -19,7 +19,6 @@ from services.exceptions import KinozalApiError
 from torrents.interfaces import (
     DownloadResult,
     SearchResult,
-    TorrentAuthServiceProtocol,
     TorrentDetailServiceProtocol,
     TorrentDownloadServiceProtocol,
     TorrentProviderProtocol,
@@ -98,8 +97,12 @@ class MovieSearchService(TorrentSearchServiceProtocol):
 
 
 class MovieDownloadService(TorrentDownloadServiceProtocol):
-    def __init__(self, movie_id: int | str, auth_cookies: dict[str, str]):
-        self.auth_cookies = auth_cookies
+    def __init__(
+        self,
+        movie_id: int | str,
+        credentials: dict[str, str] | None = None,
+    ) -> None:
+        self.credentials = credentials or {}
         self.movie_id = movie_id
         self.url = get_url(f"/download.php?id={self.movie_id}")
 
@@ -113,7 +116,8 @@ class MovieDownloadService(TorrentDownloadServiceProtocol):
         return f"{path}/{self.filename}"
 
     async def download_movie(self) -> DownloadResult:
-        async with ClientSession(cookies=self.auth_cookies) as session:
+        auth_cookies = await self._authenticate()
+        async with ClientSession(cookies=auth_cookies) as session:
             async with session.get(self.url) as response:
                 if response.status != 200:
                     raise KinozalApiError(
@@ -128,6 +132,23 @@ class MovieDownloadService(TorrentDownloadServiceProtocol):
                 async with aiofile.async_open(self.file_path, "wb") as file_handle:
                     await file_handle.write(response_file)
         return DownloadResult(file_path=self.file_path, filename=self.filename)
+
+    async def _authenticate(self) -> dict[str, str]:
+        username = self.credentials.get("username")
+        password = self.credentials.get("password")
+
+        if not username or not password:
+            raise KinozalApiError(
+                "Kinozal download requires username and password credentials."
+            )
+
+        auth_service = KinozalAuthService(username=username, password=password)
+        try:
+            return await auth_service.authenticate()
+        except AuthenticationError as exc:
+            error_message = f"Authentication failed for Kinozal download: {exc}"
+            logger.error(error_message)
+            raise KinozalApiError(error_message) from exc
 
 
 class MovieDetailService:
@@ -266,7 +287,7 @@ class MovieDetailParser:
         return video_details
 
 
-class KinozalAuthService(TorrentAuthServiceProtocol):
+class KinozalAuthService:
     def __init__(self, username: str, password: str) -> None:
         self.username = username
         self.password = password
@@ -305,27 +326,20 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
 
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
+        self._search_service: TorrentSearchServiceProtocol = MovieSearchService()
+        self._detail_service: TorrentDetailServiceProtocol = MovieDetailService()
 
-    def get_auth_service(self) -> TorrentAuthServiceProtocol | None:
-        if not self._credentials:
-            return None
-        username = self._credentials.get("username")
-        password = self._credentials.get("password")
-        if not username or not password:
-            return None
-        return KinozalAuthService(username=username, password=password)
+    async def search(self, query: str, quality: str | int) -> list[SearchResult]:
+        return await self._search_service.search(query, quality)
 
-    def get_search_service(self) -> TorrentSearchServiceProtocol:
-        return MovieSearchService()
+    async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
+        return await self._detail_service.get_movie_detail(movie_id)
 
-    def get_detail_service(self) -> TorrentDetailServiceProtocol:
-        return MovieDetailService()
-
-    def get_download_service(
-        self, movie_id: int | str, auth_data: dict[str, str] | None = None
-    ) -> TorrentDownloadServiceProtocol:
-        if auth_data is None:
-            raise ValueError("Kinozal download service requires auth data.")
-        return MovieDownloadService(movie_id, auth_data)
+    async def download_movie(self, movie_id: int | str) -> DownloadResult:
+        download_service = MovieDownloadService(
+            movie_id=movie_id,
+            credentials=self._credentials,
+        )
+        return await download_service.download_movie()
 
 

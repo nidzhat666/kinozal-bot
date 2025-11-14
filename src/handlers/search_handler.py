@@ -58,8 +58,8 @@ async def perform_search(query: str, quality: str, message: Message, callback_qu
     logger.info(f"Received search command with query: {query} and quality: {quality}")
 
     try:
-        search_service = get_torrent_provider().get_search_service()
-        results = await search_service.search(query, quality)
+        provider = get_torrent_provider()
+        results = await provider.search(query, quality)
         logger.info(f"Search completed with {len(results)} results.")
     except Exception as e:
         logger.error(f"Search failed: {e}")
