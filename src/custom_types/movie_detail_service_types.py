@@ -10,6 +10,9 @@ class TorrentDetails(BaseModel):
     key: str
     value: str | None = None
 
+class AudioLanguage(BaseModel):
+    language: str # RUS, ENG, UKR, ...
+    quality: str # DUB, SUB, Original, ...
 
 class MovieDetails(BaseModel):
     name: str
@@ -17,7 +20,11 @@ class MovieDetails(BaseModel):
     genres: list[str]
     director: str
     actors: list[str]
-    image_url: str
+    season: int | None = None
+    image_url: str | None = None
+    video_quality: str | None = None
+    audio_quality: str | None = None
+    audio_language: list[AudioLanguage] | None = []
     ratings: MovieRatings
     torrent_details: list[TorrentDetails]
 

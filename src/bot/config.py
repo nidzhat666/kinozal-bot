@@ -26,3 +26,8 @@ REDIS_DB = os.getenv("REDIS_DB")
 
 PLEX_URL = os.getenv("PLEX_URL")
 PLEX_TOKEN = os.getenv("PLEX_TOKEN")
+
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")
