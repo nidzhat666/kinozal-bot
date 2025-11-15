@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from itertools import groupby
 
 from aiogram.types import (
     CallbackQuery,
@@ -64,6 +65,25 @@ async def perform_torrent_search(
 
     if not results:
         logger.info("No torrent results found for query '%s'", query)
+        await target_message.edit_text("По запросу ничего не найдено.")
+        return
+
+    # Group by quality and pick the one with the most seeds
+    def get_quality(result: MovieSearchResult) -> str:
+        return result.video_quality or "N/A"
+
+    results.sort(key=get_quality)
+    best_results: list[MovieSearchResult] = []
+    for _, group in groupby(results, key=get_quality):
+        best_in_group = max(list(group), key=lambda r: r.seeds if r.seeds is not None else -1)
+        best_results.append(best_in_group)
+
+    # Sort by seeds descending for better presentation
+    best_results.sort(key=lambda r: r.seeds if r.seeds is not None else -1, reverse=True)
+    results = best_results
+
+    if not results:
+        logger.info("No torrent results left after filtering for query '%s'", query)
         await target_message.edit_text("По запросу ничего не найдено.")
         return
 
