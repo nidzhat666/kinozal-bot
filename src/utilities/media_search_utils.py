@@ -85,7 +85,9 @@ async def show_season_choices(
                 "season": season,
                 "movie_id": movie_details.provider_id,
                 "movie": movie_dump,
+                "movie_details": movie_dump,
                 "season_year": season_year,
+                "original_query": original_query,
                 "requested_item": requested_item,
                 "requested_type": requested_type,
             }
@@ -125,9 +127,26 @@ async def get_details_from_callback(
     callback_data: dict,
 ) -> MediaDetails | None:
     movie_id = callback_data.get("movie_id")
+    movie_details_payload = callback_data.get("movie_details")
+    if movie_details_payload:
+        try:
+            return MediaDetails.model_validate(movie_details_payload)
+        except ValidationError:
+            logger.debug("Failed to validate cached MediaDetails payload.")
+
     movie_payload = callback_data.get("movie")
 
     if not movie_id:
+        movie_payload = movie_payload or movie_details_payload
+        if movie_payload:
+            try:
+                return MediaDetails.model_validate(movie_payload)
+            except ValidationError:
+                try:
+                    base_info = MediaItem.model_validate(movie_payload)
+                    return MediaDetails(**base_info.model_dump())
+                except ValidationError:
+                    logger.debug("Failed to build MediaDetails from cached data without movie_id.")
         return None
 
     # Always try to fetch fresh details first to get season info.
@@ -140,12 +159,16 @@ async def get_details_from_callback(
             movie_id,
             exc,
         )
-        if movie_payload:
+        payload = movie_payload or movie_details_payload
+        if payload:
             try:
-                base_info = MediaItem.model_validate(movie_payload)
-                return MediaDetails(**base_info.model_dump())
+                return MediaDetails.model_validate(payload)
             except ValidationError:
-                logger.debug("Failed to create MediaDetails from cached MediaItem.")
+                try:
+                    base_info = MediaItem.model_validate(payload)
+                    return MediaDetails(**base_info.model_dump())
+                except ValidationError:
+                    logger.debug("Failed to create MediaDetails from cached payload.")
     return None
 
 
@@ -159,10 +182,17 @@ async def show_cached_torrent_results(
 
     results_json = cached_data.get("results", [])
     requested_item = cached_data.get("requested_item")
+    back_callback_key = cached_data.get("back_callback_key")
+    back_button_text = cached_data.get("back_button_text")
 
     try:
         results = [MovieSearchResult.model_validate(r) for r in results_json]
-        keyboard = format_torrent_search_results(results, cache_key)
+        keyboard = format_torrent_search_results(
+            results,
+            cache_key,
+            back_callback_key=back_callback_key,
+            back_button_text=back_button_text,
+        )
 
         message_text = "Выберите результат"
         if requested_item:

@@ -23,7 +23,7 @@ async def get_movie_search_result(movie_detail: MovieDetails, **kwargs) -> Movie
                 role="system",
             ),
         ],
-        model="openai/gpt-oss-120b",
+        model="openai/gpt-oss-20b",
     )
     response = chat_completion.choices[0].message.content
     json_response = json.loads(response)

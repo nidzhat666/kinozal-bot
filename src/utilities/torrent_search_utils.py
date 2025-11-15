@@ -26,6 +26,8 @@ async def perform_torrent_search(
     *,
     requested_item: str | None = None,
     requested_type: str | None = None,
+    back_callback_key: str | None = None,
+    back_button_text: str | None = None,
 ) -> None:
     logger.info("Searching torrents for query '%s'", query)
 
@@ -92,11 +94,18 @@ async def perform_torrent_search(
     results_cache_data = {
         "results": results_json,
         "requested_item": requested_item,
+        "back_callback_key": back_callback_key,
+        "back_button_text": back_button_text,
     }
     results_cache_key = redis_callback_save(results_cache_data)
 
     try:
-        keyboard = format_torrent_search_results(results, results_cache_key)
+        keyboard = format_torrent_search_results(
+            results,
+            results_cache_key,
+            back_callback_key=back_callback_key,
+            back_button_text=back_button_text,
+        )
         if not keyboard.inline_keyboard:
             await target_message.edit_text("По запросу ничего не найдено.")
             return
@@ -122,6 +131,9 @@ async def perform_torrent_search(
 def format_torrent_search_results(
     results: list[MovieSearchResult],
     results_cache_key: str,
+    *,
+    back_callback_key: str | None = None,
+    back_button_text: str | None = None,
 ) -> InlineKeyboardMarkup:
     buttons: list[list[InlineKeyboardButton]] = []
     for result in results:
@@ -139,6 +151,10 @@ def format_torrent_search_results(
             }
         )
         buttons.append([InlineKeyboardButton(text=button_label, callback_data=movie_details_uuid)])
+
+    if back_callback_key:
+        back_text = back_button_text or "Назад"
+        buttons.append([InlineKeyboardButton(text=back_text, callback_data=back_callback_key)])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard
