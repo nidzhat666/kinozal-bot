@@ -46,8 +46,8 @@ def get_movie_search_prompt(title: str, body: str,
                                       **kwargs)
 
 
-if __name__ == '__main__':
-    import asyncio
-    asyncio.run(get_movie_search_result(
-
-    ))
+# if __name__ == '__main__':
+#     import asyncio
+#     asyncio.run(get_movie_search_result(
+#
+#     ))

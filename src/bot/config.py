@@ -29,5 +29,9 @@ PLEX_TOKEN = os.getenv("PLEX_TOKEN")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+KINOPOISK_API_URL = os.getenv("KINOPOISK_API_URL", "https://api.poiskkino.dev/v1.4")
+KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
+KINOPOISK_SEARCH_LIMIT = int(os.getenv("KINOPOISK_SEARCH_LIMIT", 10))
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

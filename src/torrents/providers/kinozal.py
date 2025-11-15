@@ -34,13 +34,13 @@ class _RawSearchItem:
     size: str
 
 
-async def _search_movies(query: str, quality: str | int) -> list[MovieSearchResult]:
+async def _search_movies(query: str) -> list[MovieSearchResult]:
     started_at = perf_counter()
-    logger.debug("Starting Kinozal search for query '%s' (quality=%s)", query, quality)
+    logger.debug("Starting Kinozal search for query '%s'", query)
 
-    raw_items = await _fetch_search_items(query, quality)
+    raw_items = await _fetch_search_items(query)
     if not raw_items:
-        _log_search_duration(query, quality, 0, started_at)
+        _log_search_duration(query, 0, started_at)
         return []
 
     enriched_results = await asyncio.gather(
@@ -59,12 +59,12 @@ async def _search_movies(query: str, quality: str | int) -> list[MovieSearchResu
             continue
         movies.append(result)
 
-    _log_search_duration(query, quality, len(movies), started_at)
+    _log_search_duration(query, len(movies), started_at)
     return movies
 
 
-async def _fetch_search_items(query: str, quality: str | int) -> list[_RawSearchItem]:
-    params = {"s": query, "v": quality, "t": 1, "g": 3}
+async def _fetch_search_items(query: str) -> list[_RawSearchItem]:
+    params = {"s": query, "t": 1, "g": 3}
     html = await _get_text("/browse.php", params=params)
     return _parse_search_results(html)
 
@@ -249,15 +249,13 @@ def _extract_span_text(soup: BeautifulSoup, label: str) -> str:
 
 def _log_search_duration(
     query: str,
-    quality: str | int,
     result_count: int,
     started_at: float,
 ) -> None:
     duration = perf_counter() - started_at
     logger.info(
-        "Search completed for query '%s' (quality=%s) with %d results in %.2fs",
+        "Search completed for query '%s' with %d results in %.2fs",
         query,
-        quality,
         result_count,
         duration,
     )
@@ -337,8 +335,8 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
 
-    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
-        return await _search_movies(query, quality)
+    async def search(self, query: str) -> list[MovieSearchResult]:
+        return await _search_movies(query)
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         return await _fetch_movie_details(movie_id)

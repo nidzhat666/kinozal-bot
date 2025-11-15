@@ -32,7 +32,7 @@ class TorrentDownloadServiceProtocol(Protocol):
 class TorrentProviderProtocol(Protocol):
     name: str
 
-    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
+    async def search(self, query: str) -> list[MovieSearchResult]:
         """Search for torrents by query and quality."""
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
