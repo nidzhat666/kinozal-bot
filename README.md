@@ -18,6 +18,7 @@ Built with Python, it's easy to set up and customize for your media server needs
 ## ✨ Features
 
 - **Movie Search**: Quickly find movies with details like ratings, cast, and summaries.
+- **Smart Torrent Search**: Uses Groq LLMs to intelligently find and select the best torrents for each video quality, prioritizing those with the most seeds.
 - **Torrent Management**: Add, pause, resume, delete torrents, and view detailed statuses.
 - **Plex Integration**: Trigger library scans to update your media collection.
 - **Multi-Source Support**: Pull data from multiple torrent and movie info providers.
