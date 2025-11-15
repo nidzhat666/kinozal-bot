@@ -11,8 +11,8 @@ from aiogram.types import (
 from pydantic import ValidationError
 
 from bot.constants import MEDIA_LIST_CALLBACK, MEDIA_SELECT_CALLBACK, SEASON_SELECT_CALLBACK
-from custom_types.movie_detail_service_types import MovieSearchResult
-from custom_types.search_provider_types import MediaDetails, MediaItem
+from models.movie_detail_service_types import MovieSearchResult
+from models.search_provider_types import MediaDetails, MediaItem
 from services.exceptions import KinopoiskApiError, NoResultsFoundError, TmdbApiError
 from services.search_integrations.registry import get_search_provider
 from utilities.handlers_utils import redis_callback_get, redis_callback_save

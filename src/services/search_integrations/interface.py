@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from custom_types.search_provider_types import MediaDetails, SearchResults
+from models.search_provider_types import MediaDetails, SearchResults
 
 
 class SearchProvider(ABC):

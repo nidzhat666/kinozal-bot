@@ -6,14 +6,14 @@ from typing import Any
 import httpx
 
 from bot.config import TMDB_API_TOKEN, TMDB_API_URL
-from custom_types.search_provider_types import (
+from models.search_provider_types import (
     MediaDetails,
     MediaItem,
     Provider,
     SearchResults,
     SeasonDetails,
 )
-from custom_types.tmdb_types import (
+from models.tmdb_types import (
     TmdbMovieDetails,
     TmdbMovieSearchResult,
     TmdbSearchResponse,

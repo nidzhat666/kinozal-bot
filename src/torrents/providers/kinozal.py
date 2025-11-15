@@ -12,7 +12,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 from yarl import URL
 
-from custom_types.movie_detail_service_types import (
+from models.movie_detail_service_types import (
     MovieDetails,
     MovieRatings,
     MovieSearchResult,

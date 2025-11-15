@@ -2,28 +2,28 @@ import httpx
 
 from bot.config import RUTRACKER_URL
 from services.exceptions import RutrackerApiError
-from custom_types.movie_detail_service_types import MovieDetails
+from models.movie_detail_service_types import MovieDetails
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
-from custom_types.movie_detail_service_types import MovieSearchResult
+from models.movie_detail_service_types import MovieSearchResult
 
 def get_url(path: str = "") -> str:
     return f"https://{RUTRACKER_URL}{path}"
 
-class AuthService:
-    def __init__(self, username: str, password: str) -> None:
-        self.username = username
-        self.password = password
 
-    async def authenticate(self) -> dict[str, str]:
-        async with httpx.AsyncClient() as client:
-            url = get_url("/forum/login.php")
-            data = {"login_username": self.username,
-                    "login_password": self.password,
-                    "login": "%E2%F5%EE%E4"}
-            response = await client.post(url, data=data)
-            if response.status_code != 302:
-                raise RutrackerApiError("Failed to authenticate")
-        return {"bb_session": response.cookies.get("bb_session")}
+async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+    username = credentials.get("username")
+    password = credentials.get("password")
+    async with httpx.AsyncClient() as client:
+        url = get_url("/forum/login.php")
+        data = {
+            "login_username": username,
+            "login_password": password,
+            "login": "%E2%F5%EE%E4",
+        }
+        response = await client.post(url, data=data)
+        if response.status_code != 302:
+            raise RutrackerApiError("Failed to authenticate")
+    return {"bb_session": response.cookies.get("bb_session")}
 
 
 

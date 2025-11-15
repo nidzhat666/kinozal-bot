@@ -6,14 +6,14 @@ from typing import Any
 import httpx
 
 from bot.config import KINOPOISK_API_KEY, KINOPOISK_API_URL, KINOPOISK_SEARCH_LIMIT
-from custom_types.kinopoisk_types import (
+from models.kinopoisk_types import (
     KinopoiskMovieBase,
     KinopoiskMovieDetails,
     KinopoiskSearchResponse,
     KinopoiskSeason,
     KinopoiskSeasonListResponse,
 )
-from custom_types.search_provider_types import (
+from models.search_provider_types import (
     MediaDetails,
     MediaItem,
     Provider,

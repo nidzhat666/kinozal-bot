@@ -1,74 +1,127 @@
-Kinozal Movie Finder Bot for Telegram and qBittorrent
-=============================================
+# Kinozal Bot
 
-Introduction
-------------
+![Kinozal Bot Logo](screenshots/logo.png) <!-- Optional: Add a logo if available -->
 
-The Movie Finder Bot is a Telegram bot designed to facilitate easy searching and downloading of movies via the Kinozal cinema database and qBittorrent. It integrates with Telegram to provide a seamless experience from search to download.
+A modern Telegram bot for movie enthusiasts! Search, download, and manage torrents seamlessly with integrations for Kinopoisk, TMDB, qBittorrent, and Plex.
 
-Features
---------
+## 🚀 What is Kinozal Bot?
 
-*   **Search**: Users can search Kinozal's extensive movie database directly from Telegram using the `/search` command.
-*   **Interactive Results**: Search results are returned as inline buttons in Telegram for easy selection.
-*   **Torrent Details**: Detailed information about each movie is provided, including ratings and descriptions.
-*   **Adaptive Download Categories**: Movies can be downloaded into specific categories within qBittorrent, automatically pulled from Kinozal.
-*   **Kinozal Direct Access**: The bot provides a button to open the selected movie on Kinozal's website.
-*   **Status Updates**: The `/status` command allows users to check the progress of downloads in qBittorrent.
+Kinozal Bot is your personal movie assistant on Telegram. It allows you to:
 
-Setup
------
+- Search for movies using popular databases like Kinopoisk and TMDB.
+- Find and download torrents from providers like Kinozal and Rutracker.
+- Manage your downloads via qBittorrent (start, pause, delete, check status).
+- Automatically refresh your Plex library after downloads.
+
+Built with Python, it's easy to set up and customize for your media server needs.
+
+## ✨ Features
+
+- **Movie Search**: Quickly find movies with details like ratings, cast, and summaries.
+- **Torrent Management**: Add, pause, resume, delete torrents, and view detailed statuses.
+- **Plex Integration**: Trigger library scans to update your media collection.
+- **Multi-Source Support**: Pull data from multiple torrent and movie info providers.
+- **User-Friendly Interface**: Intuitive Telegram commands and inline keyboards.
+
+## 📸 Screenshots
+
+Here are some examples of how the bot works.
+
+![Movie Search](screenshots/search.png)
+*Searching for a movie and viewing results.*
+
+![Series Season Choice](screenshots/series_seasons.png)
+*Selecting a season to view episodes.*
+
+![Torrents List](screenshots/torrents_list.png)
+*Viewing available torrents for a movie.*
+
+![Torrent Download](screenshots/download.png)
+*Selecting and downloading a torrent.*
+
+![Torrent Management List](screenshots/management.png)
+![Torrent Management Detail](screenshots/management_detail.png)
+*Viewing torrent statuses and managing downloads.*
+
+![Plex Refresh](screenshots/plex_refresh.png)
+*Refreshing the Plex library after a download.*
+
+## 🛠️ Setup
+
+Follow these steps to get Kinozal Bot up and running.
 
 ### Prerequisites
 
-*   Docker and Docker Compose
-*   qBittorrent with Web UI enabled
-*   A Telegram bot token
+- Python 3.10+
+- Docker (optional but recommended)
+- Telegram Bot Token (from BotFather)
+- API keys for Kinopoisk, TMDB, etc.
+- qBittorrent and Plex setup
 
-### Environment Setup
+### Installation
 
-Create a `.env` file with the following contents:
+1. **Clone the Repository**
 
-    # Telegram Bot Info
-    TELEGRAM_BOT_TOKEN=<Your_Telegram_Bot_Token>
-    
-    # Kinozal Credentials
-    KINOZAL_USERNAME=<Your_Kinozal_Username>
-    KINOZAL_PASSWORD=<Your_Kinozal_Password>
-    
-    # Docker Configuration
-    LOCAL_BUILD=1
-    
-    # qBittorrent Configuration
-    QBT_HOST=http://localhost
-    QBT_USERNAME=admin
-    QBT_PASSWORD=<Your_qBittorrent_Password>
-    QBT_PORT=8080
-    
-    # Redis Configuration
-    REDIS_HOST=localhost
-    REDIS_PORT=6379
-    REDIS_DB=0
-    
+   ```bash
+   git clone https://github.com/yourusername/kinozal-bot.git
+   cd kinozal-bot
+   ```
 
-### Running the Bot
+2. **Set Up Environment**
 
-To start the bot, navigate to the directory containing your `docker-compose.yml` and `.env` files and run:
+   Copy the example env file and fill in your details:
 
-    docker-compose up -d
+   ```bash
+   cp example.env .env
+   ```
 
-Usage
------
+   Edit `.env` with your Telegram token, API keys, qBittorrent credentials, etc.
 
-With the bot up and running, simply send the `/search` command followed by your query to start searching for movies. Follow the interactive prompts to select a movie and manage your downloads.
+3. **Install Dependencies**
 
-Contributing
-------------
+   Using uv (recommended):
 
-Feel free to fork the repository, make improvements, and submit pull requests. We appreciate your contributions to make the Movie Finder Bot even better!
+   ```bash
+   uv sync
+   ```
 
+   Or with pip:
 
-Support
--------
+   ```bash
+   pip install -e .
+   ```
 
-If you encounter any issues or have any questions, please file an issue on the repository's issue tracker.
+4. **Run with Docker**
+
+   ```bash
+   docker-compose up -d
+   ```
+
+   For qBittorrent-specific compose:
+
+   ```bash
+   docker-compose -f docker-compose-qbt.yaml up -d
+   ```
+
+## 📖 How to Use
+
+1. **Start the Bot**: Send `/start` to initialize.
+2. **Search for Movies**: Use `/search movie_name` or the inline search.
+3. **View Details**: Select a movie to see more info.
+4. **Download Torrent**: Choose a torrent provider and start downloading.
+5. **Manage Torrents**: Use commands like `/status`.
+6. **Refresh Plex**: After download, use `/refresh_plex` to update your library.
+
+For more commands, check the bot's help menu with `/help`.
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to open issues or submit pull requests.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+Built with ❤️ by [Your Name]. If you have questions, reach out on Telegram or GitHub!

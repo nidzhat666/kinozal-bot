@@ -11,7 +11,7 @@ from aiogram.types import (
 )
 
 from bot.constants import MOVIE_DETAILED_CALLBACK
-from custom_types.movie_detail_service_types import MovieSearchResult
+from models.movie_detail_service_types import MovieSearchResult
 from torrents import get_torrent_provider
 from utilities.groq_utils import filter_movies_with_groq
 from utilities.handlers_utils import redis_callback_save
@@ -53,8 +53,9 @@ async def perform_torrent_search(
     for result in raw_results:
         if result.id in seen_movie_ids:
             continue
-        seen_movie_ids.add(result.id)
-        results.append(result)
+        if result.seeds:
+            seen_movie_ids.add(result.id)
+            results.append(result)
 
     if requested_item and requested_type:
         results = await filter_movies_with_groq(

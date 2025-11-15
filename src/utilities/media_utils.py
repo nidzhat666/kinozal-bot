@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from custom_types.search_provider_types import MediaDetails
+from models.search_provider_types import MediaDetails
 
 
 def build_torrent_query_from_media_details(

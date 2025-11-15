@@ -117,6 +117,8 @@ Important extraction rules (TITLE ONLY):
     - HDR/DV variants like "WEB-DL 2160p HDR", "WEBRip 2160p HDR10", "WEBRip 2160p HDR10+",
       "WEBRip 2160p Dolby Vision", "BluRay 2160p HDR10", "BluRay 2160p HDR10+",
       "BluRay 2160p DV", "REMUX 2160p HDR10", "REMUX 2160p DV", "REMUX 2160p DV/HDR10+".
+  - If only a **source marker without resolution** is present (e.g. "BDRip", "HDRip", "WEBRip", "DVDRip", "BluRay")
+    return that exact marker (e.g. "BDRip").
   - If multiple qualities are mentioned, choose the main or best one.
   - If video quality cannot be determined from the title, use "".
 

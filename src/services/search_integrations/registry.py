@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from bot.config import SEARCH_PROVIDER
-from custom_types.search_provider_types import Provider
+from models.search_provider_types import Provider
 from services.search_integrations.interface import SearchProvider
 from services.search_integrations.kinopoisk import kinopoisk_service
 from services.search_integrations.tmdb import tmdb_service

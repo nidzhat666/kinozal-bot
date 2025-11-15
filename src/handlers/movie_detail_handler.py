@@ -7,7 +7,7 @@ from aiogram.utils.text_decorations import html_decoration
 
 from bot.config import QBT_CREDENTIALS
 from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
-from custom_types.movie_detail_service_types import MovieDetails, MovieSearchResult
+from models.movie_detail_service_types import MovieDetails, MovieSearchResult
 from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import kinozal_utils, handlers_utils

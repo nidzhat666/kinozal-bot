@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from bot import config
 from bot.config import TEMPLATES_DIR
-from custom_types.movie_detail_service_types import AudioLanguage, MovieDetails
+from models.movie_detail_service_types import AudioLanguage, MovieDetails
 
 client = AsyncGroq(
     api_key=config.GROQ_API_KEY
