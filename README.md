@@ -29,22 +29,36 @@ Built with Python, it's easy to set up and customize for your media server needs
 Here are some examples of how the bot works.
 
 ![Movie Search](screenshots/search.png)
+
 *Searching for a movie and viewing results.*
 
+
+
 ![Series Season Choice](screenshots/series_seasons.png)
+
 *Selecting a season to view episodes.*
 
+
+
 ![Torrents List](screenshots/torrents_list.png)
+
 *Viewing available torrents for a movie.*
 
+
+
 ![Torrent Download](screenshots/download.png)
+
 *Selecting and downloading a torrent.*
+
+
 
 ![Torrent Management List](screenshots/management.png)
 ![Torrent Management Detail](screenshots/management_detail.png)
+
 *Viewing torrent statuses and managing downloads.*
 
 ![Plex Refresh](screenshots/plex_refresh.png)
+
 *Refreshing the Plex library after a download.*
 
 ## 🛠️ Setup
