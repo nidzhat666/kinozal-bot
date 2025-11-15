@@ -54,16 +54,27 @@ async def handle_search_query(message: Message):
 
 @router.callback_query(lambda c: check_action(c.data, SEARCH_MOVIE_CALLBACK))
 async def handle_search_callback(callback_query: CallbackQuery):
-    quality_info = redis_callback_get(callback_query.data)
-    if quality_info:
-        query = quality_info.get("query")
-        if not query:
-            await callback_query.answer("Недостаточно данных для повтора поиска.", show_alert=True)
-            return
-        await perform_search(query, callback_query.message, callback_query)
-        await callback_query.answer()
-    else:
+    search_info = redis_callback_get(callback_query.data)
+    if not search_info:
         await callback_query.answer("Error retrieving quality data.", show_alert=True)
+        return
+
+    query = search_info.get("query")
+    if not query:
+        await callback_query.answer("Недостаточно данных для повтора поиска.", show_alert=True)
+        return
+
+    requested_item = search_info.get("requested_item")
+    requested_type = search_info.get("requested_type")
+
+    await perform_search(
+        query,
+        callback_query.message,
+        callback_query,
+        requested_item=requested_item,
+        requested_type=requested_type,
+    )
+    await callback_query.answer()
 
 
 async def show_kinopoisk_results(
@@ -78,12 +89,18 @@ async def show_kinopoisk_results(
 
     buttons: list[list[InlineKeyboardButton]] = []
     for movie in movies[:10]:
+        if not movie.name:
+            continue
+        requested_item = movie.name or movie.alternative_name or kinopoisk_utils.get_preferred_title(movie)
+        requested_type = "series" if movie.is_series else "movie"
         callback_key = redis_callback_save(
             {
                 "action": KINOPOISK_RESULT_SELECT_CALLBACK,
                 "query": query,
                 "movie_id": movie.id,
                 "movie": movie.model_dump(mode="json", by_alias=True, exclude_none=True),
+                "requested_item": requested_item,
+                "requested_type": requested_type,
             }
         )
         caption = kinopoisk_utils.format_button_caption(movie)
@@ -128,6 +145,8 @@ async def handle_kinopoisk_selection(callback_query: CallbackQuery):
     movie_id = redis_data.get("movie_id")
     original_query = redis_data.get("query")
     movie_payload = redis_data.get("movie")
+    requested_item = redis_data.get("requested_item")
+    requested_type = redis_data.get("requested_type")
 
     if movie_id is None:
         await callback_query.answer("Недостаточно данных для обработки выбора.", show_alert=True)
@@ -151,6 +170,13 @@ async def handle_kinopoisk_selection(callback_query: CallbackQuery):
             movie_from_search.model_dump(mode="json", by_alias=True, exclude_none=True)
         )
 
+    base_title = (
+        requested_item
+        or movie_details.name
+        or movie_details.alternative_name
+        or kinopoisk_utils.get_preferred_title(movie_details)
+    )
+
     seasons = kinopoisk_utils.extract_available_seasons(movie_details.seasons_info)
     if movie_details.is_series and seasons:
         await _show_season_choices(
@@ -158,12 +184,20 @@ async def handle_kinopoisk_selection(callback_query: CallbackQuery):
             movie_details,
             seasons,
             original_query,
+            base_title,
+            requested_type or "series",
         )
         await callback_query.answer()
         return
 
     search_query = kinopoisk_utils.build_torrent_query(movie_details)
-    await perform_search(search_query, callback_query.message, callback_query)
+    await perform_search(
+        search_query,
+        callback_query.message,
+        callback_query,
+        requested_item=base_title,
+        requested_type=requested_type or ("series" if movie_details.is_series else "movie"),
+    )
     await callback_query.answer()
 
 
@@ -172,10 +206,12 @@ async def _show_season_choices(
     movie_details: KinopoiskMovieDetails,
     seasons: list[int],
     original_query: str,
+    requested_item: str | None,
+    requested_type: str,
 ) -> None:
     buttons: list[list[InlineKeyboardButton]] = []
     movie_dump = movie_details.model_dump(mode="json", by_alias=True, exclude_none=True)
-    search_context = original_query or kinopoisk_utils.get_preferred_title(movie_details)
+    search_context = original_query or requested_item or kinopoisk_utils.get_preferred_title(movie_details)
 
     season_year_map: dict[int, int | None] = {}
     try:
@@ -204,6 +240,8 @@ async def _show_season_choices(
                 "movie_id": movie_details.id,
                 "movie": movie_dump,
                 "season_year": season_year,
+                "requested_item": requested_item,
+                "requested_type": requested_type,
             }
         )
         buttons.append(
@@ -248,6 +286,8 @@ async def handle_kinopoisk_season_selection(callback_query: CallbackQuery):
     movie_payload = redis_data.get("movie")
     movie_id = redis_data.get("movie_id")
     season_year_raw = redis_data.get("season_year")
+    requested_item_base = redis_data.get("requested_item")
+    requested_type = redis_data.get("requested_type") or "series"
 
     try:
         season_number = int(season)
@@ -293,13 +333,25 @@ async def handle_kinopoisk_season_selection(callback_query: CallbackQuery):
         await callback_query.answer("Не удалось обработать выбор сезона.", show_alert=True)
         return
 
+    requested_item = requested_item_base or movie_details.name or movie_details.alternative_name
+    if requested_item:
+        validation_item = f"{requested_item} {season_number} сезон"
+    else:
+        validation_item = None
+
     search_query = kinopoisk_utils.build_torrent_query(
         movie_details,
         season_number=season_number,
         season_year=season_year,
         include_year_for_movie=False,
     )
-    await perform_search(search_query, callback_query.message, callback_query)
+    await perform_search(
+        search_query,
+        callback_query.message,
+        callback_query,
+        requested_item=validation_item,
+        requested_type=requested_type,
+    )
     await callback_query.answer()
 
 
@@ -307,6 +359,9 @@ async def perform_search(
     query: str,
     message: Message,
     callback_query: CallbackQuery | None = None,
+    *,
+    requested_item: str | None = None,
+    requested_type: str | None = None,
 ) -> None:
     logger.info("Searching torrents for query '%s'", query)
 
@@ -314,7 +369,11 @@ async def perform_search(
     target_message = callback_query.message if callback_query else message
 
     try:
-        raw_results = await provider.search(query)
+        raw_results = await provider.search(
+            query,
+            requested_item=requested_item,
+            requested_type=requested_type,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "Torrent search failed for query '%s': %s",
@@ -325,8 +384,8 @@ async def perform_search(
         await target_message.edit_text("Не удалось выполнить поиск по торрентам.")
         return
 
-    results: list[MovieSearchResult] = []
     seen_movie_ids: set[str] = set()
+    results: list[MovieSearchResult] = []
     for result in raw_results:
         if result.id in seen_movie_ids:
             continue
@@ -334,12 +393,23 @@ async def perform_search(
         results.append(result)
 
     if not results:
-        logger.info("No torrent results found for query '%s'", query)
+        if requested_item and requested_type:
+            logger.info("No torrent results found for query '%s' after validation", query)
+        else:
+            logger.info("No torrent results found for query '%s'", query)
         await target_message.edit_text("По запросу ничего не найдено.")
         return
 
     try:
-        keyboard = format_search_results(results, query)
+        keyboard = format_search_results(
+            results,
+            query,
+            requested_item=requested_item,
+            requested_type=requested_type,
+        )
+        if not keyboard.inline_keyboard:
+            await target_message.edit_text("По запросу ничего не найдено.")
+            return
         await target_message.edit_text("Выберите результат:", reply_markup=keyboard)
         logger.info(
             "Sent %d torrent search results for query '%s'",
@@ -357,24 +427,25 @@ async def perform_search(
 
 
 def format_search_results(
-    results: list[MovieSearchResult], query: str
+    results: list[MovieSearchResult],
+    query: str,
+    *,
+    requested_item: str | None = None,
+    requested_type: str | None = None,
 ) -> InlineKeyboardMarkup:
     buttons: list[list[InlineKeyboardButton]] = []
-    for result in results[:10]:
-        title_source = result.search_name or result.name
-        title_parts = title_source.split(" / ")
-        if len(title_parts) > 1:
-            button_label = " | ".join([title_parts[0], title_parts[-1]])
-        else:
-            button_label = title_source
-        button_text = f"{button_label} ({result.size})"
+    for result in results:
+        parts = list(filter(None, [result.search_name, result.video_quality, f"({result.size})"]))
+        button_label = " | ".join(parts)
         movie_details_uuid = redis_callback_save({
             "action": MOVIE_DETAILED_CALLBACK,
             "movie_id": result.id,
             "query": query,
             "movie_details": result.model_dump(mode="json", by_alias=True, exclude_none=True),
+            "requested_item": requested_item,
+            "requested_type": requested_type,
         })
-        buttons.append([InlineKeyboardButton(text=button_text, callback_data=movie_details_uuid)])
+        buttons.append([InlineKeyboardButton(text=button_label, callback_data=movie_details_uuid)])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     return keyboard

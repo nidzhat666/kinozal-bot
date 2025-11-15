@@ -21,6 +21,7 @@ from custom_types.movie_detail_service_types import (
 from services.exceptions import KinozalApiError
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities import kinozal_utils
+from utilities.groq_utils import get_movie_search_result
 from utilities.kinozal_utils import get_url
 
 
@@ -34,9 +35,19 @@ class _RawSearchItem:
     size: str
 
 
-async def _search_movies(query: str) -> list[MovieSearchResult]:
+async def _search_movies(
+    query: str,
+    *,
+    requested_item: str | None = None,
+    requested_type: str | None = None,
+) -> list[MovieSearchResult]:
     started_at = perf_counter()
-    logger.debug("Starting Kinozal search for query '%s'", query)
+    logger.debug(
+        "Starting Kinozal search for query '%s' (requested_item=%s, requested_type=%s)",
+        query,
+        requested_item,
+        requested_type,
+    )
 
     raw_items = await _fetch_search_items(query)
     if not raw_items:
@@ -58,6 +69,13 @@ async def _search_movies(query: str) -> list[MovieSearchResult]:
             )
             continue
         movies.append(result)
+
+    if requested_item and requested_type:
+        movies = await _filter_movies_with_groq(
+            movies,
+            requested_item=requested_item,
+            requested_type=requested_type,
+        )
 
     _log_search_duration(query, len(movies), started_at)
     return movies
@@ -261,6 +279,77 @@ def _log_search_duration(
     )
 
 
+async def _filter_movies_with_groq(
+    movies: list[MovieSearchResult],
+    *,
+    requested_item: str,
+    requested_type: str,
+) -> list[MovieSearchResult]:
+    movies_to_validate = [
+        movie for movie in movies if (movie.search_name or movie.name)
+    ]
+    if not movies_to_validate:
+        return []
+
+    validation_tasks = [
+        _validate_movie_with_groq(movie, requested_item, requested_type)
+        for movie in movies_to_validate
+    ]
+    validation_results = await asyncio.gather(
+        *validation_tasks,
+        return_exceptions=True,
+    )
+
+    filtered: list[MovieSearchResult] = []
+    for movie, validation in zip(movies_to_validate, validation_results):
+        if isinstance(validation, Exception):
+            logger.warning(
+                "Groq validation raised for Kinozal movie id %s: %s",
+                movie.id,
+                validation,
+            )
+            continue
+        if validation is not None:
+            filtered.append(validation)
+        else:
+            logger.warning("Groq validation failed for Kinozal movie title %s", movie.name)
+
+    logger.debug(
+        "Groq validation filtered %d/%d Kinozal results",
+        len(filtered),
+        len(movies_to_validate),
+    )
+    return filtered
+
+
+async def _validate_movie_with_groq(
+    movie: MovieSearchResult,
+    requested_item: str,
+    requested_type: str,
+) -> MovieSearchResult | None:
+    title = movie.search_name or movie.name
+    if not title:
+        return None
+
+    try:
+        validation = await get_movie_search_result(
+            movie,
+            title=title,
+            requested_item=requested_item,
+            requested_type=requested_type,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Groq validation failed for Kinozal movie id %s (%s): %s",
+            movie.id,
+            title,
+            exc,
+        )
+        return None
+
+    return validation
+
+
 async def _download_movie(
     movie_id: int | str,
     credentials: dict[str, str],
@@ -335,8 +424,18 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
 
-    async def search(self, query: str) -> list[MovieSearchResult]:
-        return await _search_movies(query)
+    async def search(
+        self,
+        query: str,
+        *,
+        requested_item: str | None = None,
+        requested_type: str | None = None,
+    ) -> list[MovieSearchResult]:
+        return await _search_movies(
+            query,
+            requested_item=requested_item,
+            requested_type=requested_type,
+        )
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         return await _fetch_movie_details(movie_id)

@@ -32,22 +32,20 @@ async def get_movie_search_result(movie_detail: MovieDetails, **kwargs) -> Movie
     movie_detail.audio_quality = json_response.get("audio_quality")
     audio_language = [AudioLanguage(**lang) for lang in json_response.get("audio_language", [])]
     movie_detail.audio_language = audio_language
+    movie_detail.search_name = json_response.get("name")
     return movie_detail
 
 
-def get_movie_search_prompt(title: str, body: str,
-                            requested: str, requested_type: str,
-                            **kwargs) -> str:
+def get_movie_search_prompt(
+    title: str, requested_item: str, requested_type: str, **kwargs
+) -> str:
     env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
     template = env.get_template("movie_search_prompt.j2")
 
-    return template.render(title=title, body=body,
-                                      requested=requested, requested_type=requested_type,
-                                      **kwargs)
+    return template.render(
+        title=title,
+        requested_item=requested_item,
+        requested_type=requested_type,
+        **kwargs,
+    )
 
-
-# if __name__ == '__main__':
-#     import asyncio
-#     asyncio.run(get_movie_search_result(
-#
-#     ))

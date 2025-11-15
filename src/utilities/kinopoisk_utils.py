@@ -11,39 +11,19 @@ def get_preferred_title(movie: KinopoiskMovieBase) -> str:
     Returns the most suitable title to display for a Kinopoisk movie.
     Preference order: localized name -> alternative name -> English name -> any alias.
     """
-    for candidate in (movie.name, movie.alternative_name, movie.en_name):
-        if candidate:
-            return candidate
+    return movie.alternative_name
 
-    for alias in movie.names:
-        if alias.name:
-            return alias.name
-
-    return str(movie.id)
-
-
-def _get_title_aliases(movie: KinopoiskMovieBase) -> list[str]:
-    aliases: list[str] = []
-    for alias in movie.names:
-        if alias.name and alias.name not in aliases:
-            aliases.append(alias.name)
-        if len(aliases) >= 2:
-            break
-    return aliases
 
 
 def format_button_caption(movie: KinopoiskMovieBase) -> str:
     """Builds a caption using the first two titles from the alias list."""
-    aliases = _get_title_aliases(movie)
-    if not aliases:
-        aliases.append(get_preferred_title(movie))
 
-    segments: list[str] = aliases[:2]
+    segments: list[str] = list(filter(None, [movie.name or None, movie.alternative_name]))
 
     if movie.year:
         segments.append(str(movie.year))
 
-    movie_type = movie.type or ("сериал" if movie.is_series else "фильм")
+    movie_type = ("сериал" if movie.is_series else "фильм")
     segments.append(movie_type)
 
     return " / ".join(segments)

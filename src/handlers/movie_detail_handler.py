@@ -25,6 +25,8 @@ async def handle_movie_selection(callback_query: CallbackQuery):
     callback_data = handlers_utils.redis_callback_get(callback_query.data)
     movie_id = callback_data.get("movie_id")
     query = callback_data.get("query")
+    requested_item = callback_data.get("requested_item")
+    requested_type = callback_data.get("requested_type")
     logger.info(f"Movie selected with ID: {movie_id}")
 
     try:
@@ -43,7 +45,14 @@ async def handle_movie_selection(callback_query: CallbackQuery):
         else:
             movie_details = await fetch_movie_details(movie_id)
             logger.info("Movie details fetched for movie ID: %s", movie_id)
-        await send_movie_details(callback_query, movie_details, movie_id, query)
+        await send_movie_details(
+            callback_query,
+            movie_details,
+            movie_id,
+            query,
+            requested_item,
+            requested_type,
+        )
     except Exception as e:
         logger.error(f"Error in fetching movie details: {e}", exc_info=True)
         await callback_query.message.answer("Failed to retrieve movie details.")
@@ -55,30 +64,64 @@ async def fetch_movie_details(movie_id: str) -> MovieDetails:
     return await torrent_provider.get_movie_detail(movie_id)
 
 
-async def send_movie_details(callback_query: CallbackQuery, movie_details: MovieDetails,
-                             movie_id: int | str, query: str | None) -> None:
+async def send_movie_details(
+    callback_query: CallbackQuery,
+    movie_details: MovieDetails,
+    movie_id: int | str,
+    query: str | None,
+    requested_item: str | None,
+    requested_type: str | None,
+) -> None:
     message_caption = format_movie_details_message(movie_details)
     logger.debug(f"Sending movie details: {message_caption}")
 
     qbt_client = await get_client(**QBT_CREDENTIALS)
     categories = await qbt_get_categories(qbt_client)
 
-    reply_markup = create_reply_markup(movie_id, query or movie_details.name, categories)
+    reply_markup = create_reply_markup(
+        movie_id,
+        query or movie_details.name,
+        categories,
+        requested_item or movie_details.name,
+        requested_type,
+    )
     await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
 
-def create_reply_markup(movie_id: int | str, query: str, categories: list) -> InlineKeyboardMarkup:
+def create_reply_markup(
+    movie_id: int | str,
+    query: str,
+    categories: list,
+    requested_item: str | None,
+    requested_type: str | None,
+) -> InlineKeyboardMarkup:
     download_buttons = [
         InlineKeyboardButton(
             text=f"{category} 🔽",
-            callback_data=handlers_utils.redis_callback_save(dict(action=DOWNLOAD_TORRENT_CALLBACK, movie_id=movie_id, category=category, query=query))
+            callback_data=handlers_utils.redis_callback_save(
+                dict(
+                    action=DOWNLOAD_TORRENT_CALLBACK,
+                    movie_id=movie_id,
+                    category=category,
+                    query=query,
+                    requested_item=requested_item,
+                    requested_type=requested_type,
+                )
+            )
         ) for category in categories
     ]
 
     return InlineKeyboardMarkup(inline_keyboard=[
         download_buttons,
         [InlineKeyboardButton(text="Назад к результатам поиска",
-                              callback_data=handlers_utils.redis_callback_save(dict(action=SEARCH_MOVIE_CALLBACK, query=query)))],
+                              callback_data=handlers_utils.redis_callback_save(
+                                  dict(
+                                      action=SEARCH_MOVIE_CALLBACK,
+                                      query=query,
+                                      requested_item=requested_item,
+                                      requested_type=requested_type,
+                                  )
+                              ))],
         [InlineKeyboardButton(text="Открыть в Кинозале",
                               url=kinozal_utils.get_url(f"/details.php?id={movie_id}"))]
     ])

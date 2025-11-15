@@ -82,7 +82,7 @@ class KinopoiskApiClient:
             "page": page,
             "limit": limit or 100,
             "selectFields": ["number", "airDate", "episodesCount", "name", "enName"],
-            "notNullFields": ["number", "airDate"],
+            "notNullFields": ["number", "airDate", "name", "enName", ],
         }
 
         payload = await self._request("GET", "/season", params=params)

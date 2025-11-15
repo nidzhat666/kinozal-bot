@@ -44,7 +44,7 @@ class KinopoiskReleaseYear(BaseModel):
 
 
 class KinopoiskSeasonInfo(BaseModel):
-    number: int
+    number: int | None = None
     episodes_count: int | None = Field(default=None, alias="episodesCount")
 
     model_config = ConfigDict(populate_by_name=True)

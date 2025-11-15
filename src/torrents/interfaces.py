@@ -11,12 +11,6 @@ class DownloadResult(TypedDict):
 
 
 @runtime_checkable
-class TorrentSearchServiceProtocol(Protocol):
-    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
-        """Search for torrents by query and quality."""
-
-
-@runtime_checkable
 class TorrentDetailServiceProtocol(Protocol):
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         """Fetch detailed information about the movie or torrent item."""
@@ -32,8 +26,14 @@ class TorrentDownloadServiceProtocol(Protocol):
 class TorrentProviderProtocol(Protocol):
     name: str
 
-    async def search(self, query: str) -> list[MovieSearchResult]:
-        """Search for torrents by query and quality."""
+    async def search(
+        self,
+        query: str,
+        *,
+        requested_item: str | None = None,
+        requested_type: str | None = None,
+    ) -> list[MovieSearchResult]:
+        """Search for torrents matching the provided query."""
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         """Fetch detailed information about the movie or torrent item."""

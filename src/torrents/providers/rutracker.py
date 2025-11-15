@@ -35,7 +35,13 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
 
-    async def search(self, query: str, quality: str | int) -> list[MovieSearchResult]:
+    async def search(
+        self,
+        query: str,
+        *,
+        requested_item: str | None = None,
+        requested_type: str | None = None,
+    ) -> list[MovieSearchResult]:
         raise NotImplementedError
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
