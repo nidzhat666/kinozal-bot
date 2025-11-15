@@ -21,7 +21,6 @@ from custom_types.movie_detail_service_types import (
 from services.exceptions import KinozalApiError
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities import kinozal_utils
-from utilities.groq_utils import get_movie_search_result
 from utilities.kinozal_utils import get_url
 
 
@@ -33,6 +32,8 @@ class _RawSearchItem:
     movie_id: str
     title: str
     size: str
+    seeds: int | None = None
+    peers: int | None = None
 
 
 async def _search_movies(
@@ -70,13 +71,6 @@ async def _search_movies(
             continue
         movies.append(result)
 
-    if requested_item and requested_type:
-        movies = await _filter_movies_with_groq(
-            movies,
-            requested_item=requested_item,
-            requested_type=requested_type,
-        )
-
     _log_search_duration(query, len(movies), started_at)
     return movies
 
@@ -94,6 +88,8 @@ async def _build_movie_search_result(item: _RawSearchItem) -> MovieSearchResult:
         size=item.size,
         search_name=item.title,
         details=details,
+        seeds=item.seeds,
+        peers=item.peers,
     )
 
 
@@ -137,6 +133,11 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
         if len(size_cells) < 2:
             continue
 
+        seeds_cell = row.find("td", class_="sl_s")
+        seeds = int(seeds_cell.get_text(strip=True)) if seeds_cell else None
+        peers_cell = row.find("td", class_="sl_p")
+        peers = int(peers_cell.get_text(strip=True)) if peers_cell else None
+
         movie_id = link.get("href", "").split("=")[-1]
         if not movie_id:
             continue
@@ -146,6 +147,8 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
                 movie_id=movie_id,
                 title=link.text.strip(),
                 size=size_cells[1].text.strip(),
+                seeds=seeds,
+                peers=peers,
             )
         )
 
@@ -204,24 +207,21 @@ def _parse_actors(soup: BeautifulSoup) -> list[str]:
 
 def _parse_image_url(soup: BeautifulSoup) -> str:
     image_tag = soup.find("img", class_="p200")
-    if not image_tag:
+    if not image_tag or not isinstance(src := image_tag.get("src"), str):
         return ""
-    src = image_tag.get("src")
-    return get_url(src) if src else ""
+    return get_url(src)
 
 
 def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
-    imdb_anchor = soup.find("a", href=lambda href: href and "imdb.com" in href)
-    imdb_value = (
-        imdb_anchor.find("span").get_text(strip=True) if imdb_anchor and imdb_anchor.find("span") else "-"
-    )
+    imdb_value = "-"
+    if imdb_anchor := soup.find("a", href=lambda href: href and "imdb.com" in href):
+        if imdb_span := imdb_anchor.find("span"):
+            imdb_value = imdb_span.get_text(strip=True)
 
-    kinopoisk_anchor = soup.find("a", href=lambda href: href and "kinopoisk.ru" in href)
-    kinopoisk_value = (
-        kinopoisk_anchor.find("span").get_text(strip=True)
-        if kinopoisk_anchor and kinopoisk_anchor.find("span")
-        else "-"
-    )
+    kinopoisk_value = "-"
+    if kinopoisk_anchor := soup.find("a", href=lambda href: href and "kinopoisk.ru" in href):
+        if kinopoisk_span := kinopoisk_anchor.find("span"):
+            kinopoisk_value = kinopoisk_span.get_text(strip=True)
 
     return MovieRatings(imdb=imdb_value, kinopoisk=kinopoisk_value)
 
@@ -277,77 +277,6 @@ def _log_search_duration(
         result_count,
         duration,
     )
-
-
-async def _filter_movies_with_groq(
-    movies: list[MovieSearchResult],
-    *,
-    requested_item: str,
-    requested_type: str,
-) -> list[MovieSearchResult]:
-    movies_to_validate = [
-        movie for movie in movies if (movie.search_name or movie.name)
-    ]
-    if not movies_to_validate:
-        return []
-
-    validation_tasks = [
-        _validate_movie_with_groq(movie, requested_item, requested_type)
-        for movie in movies_to_validate
-    ]
-    validation_results = await asyncio.gather(
-        *validation_tasks,
-        return_exceptions=True,
-    )
-
-    filtered: list[MovieSearchResult] = []
-    for movie, validation in zip(movies_to_validate, validation_results):
-        if isinstance(validation, Exception):
-            logger.warning(
-                "Groq validation raised for Kinozal movie id %s: %s",
-                movie.id,
-                validation,
-            )
-            continue
-        if validation is not None:
-            filtered.append(validation)
-        else:
-            logger.warning("Groq validation failed for Kinozal movie title %s", movie.name)
-
-    logger.debug(
-        "Groq validation filtered %d/%d Kinozal results",
-        len(filtered),
-        len(movies_to_validate),
-    )
-    return filtered
-
-
-async def _validate_movie_with_groq(
-    movie: MovieSearchResult,
-    requested_item: str,
-    requested_type: str,
-) -> MovieSearchResult | None:
-    title = movie.search_name or movie.name
-    if not title:
-        return None
-
-    try:
-        validation = await get_movie_search_result(
-            movie,
-            title=title,
-            requested_item=requested_item,
-            requested_type=requested_type,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "Groq validation failed for Kinozal movie id %s (%s): %s",
-            movie.id,
-            title,
-            exc,
-        )
-        return None
-
-    return validation
 
 
 async def _download_movie(

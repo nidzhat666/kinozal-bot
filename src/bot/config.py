@@ -33,5 +33,10 @@ KINOPOISK_API_URL = os.getenv("KINOPOISK_API_URL", "https://api.poiskkino.dev/v1
 KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
 KINOPOISK_SEARCH_LIMIT = int(os.getenv("KINOPOISK_SEARCH_LIMIT", 10))
 
+TMDB_API_URL = os.getenv("TMDB_API_URL", "https://api.themoviedb.org/3")
+TMDB_API_TOKEN = os.getenv("TMDB_API_TOKEN")
+
+SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "kinopoisk").lower()
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

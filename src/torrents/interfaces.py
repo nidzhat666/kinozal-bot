@@ -1,31 +1,22 @@
 from __future__ import annotations
 
-from typing import Protocol, TypedDict, runtime_checkable
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Protocol
 
-from custom_types.movie_detail_service_types import MovieDetails, MovieSearchResult
-
-
-class DownloadResult(TypedDict):
-    file_path: str
-    filename: str
+if TYPE_CHECKING:
+    from custom_types.movie_detail_service_types import MovieDetails, MovieSearchResult
 
 
-@runtime_checkable
-class TorrentDetailServiceProtocol(Protocol):
-    async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
-        """Fetch detailed information about the movie or torrent item."""
+class DownloadResult:
+    def __init__(self, *, file_path: str, filename: str) -> None:
+        self.file_path = file_path
+        self.filename = filename
 
 
-@runtime_checkable
-class TorrentDownloadServiceProtocol(Protocol):
-    async def download_movie(self) -> DownloadResult:
-        """Download the torrent file and return its metadata."""
-
-
-@runtime_checkable
 class TorrentProviderProtocol(Protocol):
     name: str
 
+    @abstractmethod
     async def search(
         self,
         query: str,
@@ -33,12 +24,14 @@ class TorrentProviderProtocol(Protocol):
         requested_item: str | None = None,
         requested_type: str | None = None,
     ) -> list[MovieSearchResult]:
-        """Search for torrents matching the provided query."""
+        ...
 
+    @abstractmethod
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
-        """Fetch detailed information about the movie or torrent item."""
+        ...
 
+    @abstractmethod
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
-        """Download the torrent file and return its metadata."""
+        ...
 
 

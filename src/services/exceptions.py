@@ -11,3 +11,14 @@ class KinopoiskApiError(Exception):
     pass
 
 
+class TmdbApiError(Exception):
+    pass
+
+
+class NoResultsFoundError(Exception):
+    pass
+
+
+__all__ = ["KinozalApiError", "RutrackerApiError", "KinopoiskApiError", "TmdbApiError", "NoResultsFoundError"]
+
+

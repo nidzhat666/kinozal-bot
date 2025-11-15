@@ -34,6 +34,8 @@ class MovieSearchResult(MovieDetails):
     id: str = Field(alias="movie_id")
     size: str
     search_name: str | None = None
+    seeds: int | None = None
+    peers: int | None = None
 
     @classmethod
     def from_search_data(
@@ -43,10 +45,14 @@ class MovieSearchResult(MovieDetails):
         size: str,
         search_name: str,
         details: MovieDetails,
+        seeds: int | None = None,
+        peers: int | None = None,
     ) -> "MovieSearchResult":
         return cls(
             movie_id=str(search_id),
             size=size,
             search_name=search_name,
+            seeds=seeds,
+            peers=peers,
             **details.model_dump(),
         )
