@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import tempfile
 from dataclasses import dataclass
@@ -25,7 +24,6 @@ from utilities.kinozal_utils import get_url
 
 
 logger = logging.getLogger(__name__)
-
 
 @dataclass(slots=True)
 class _RawSearchItem:
@@ -55,18 +53,16 @@ async def _search_movies(
         _log_search_duration(query, 0, started_at)
         return []
 
-    enriched_results = await asyncio.gather(
-        *(_build_movie_search_result(item) for item in raw_items),
-        return_exceptions=True,
-    )
-
     movies: list[MovieSearchResult] = []
-    for item, result in zip(raw_items, enriched_results):
-        if isinstance(result, Exception):
+
+    for item in raw_items:
+        try:
+            result = _build_movie_search_result(item)
+        except Exception as exc:
             logger.error(
                 "Failed to enrich search result for id %s: %s",
                 item.movie_id,
-                result,
+                exc,
             )
             continue
         movies.append(result)
@@ -81,8 +77,10 @@ async def _fetch_search_items(query: str) -> list[_RawSearchItem]:
     return _parse_search_results(html)
 
 
-async def _build_movie_search_result(item: _RawSearchItem) -> MovieSearchResult:
-    details = await _fetch_movie_details(item.movie_id)
+def _build_movie_search_result(
+    item: _RawSearchItem,
+) -> MovieSearchResult:
+    details = _build_stub_movie_details(item)
     return MovieSearchResult.from_search_data(
         search_id=item.movie_id,
         size=item.size,
@@ -173,6 +171,23 @@ def _parse_movie_details(html: str) -> MovieDetails:
         error_message = f"Error parsing Kinozal movie detail results: {exc}"
         logger.error(error_message)
         raise KinozalApiError(error_message) from exc
+
+
+def _build_stub_movie_details(item: _RawSearchItem) -> MovieDetails:
+    return MovieDetails(
+        name=item.title,
+        year="",
+        genres=[],
+        director="",
+        actors=[],
+        season=None,
+        image_url=None,
+        video_quality=None,
+        audio_quality=None,
+        audio_language=[],
+        ratings=MovieRatings(),
+        torrent_details=[],
+    )
 
 
 def _parse_name(soup: BeautifulSoup) -> str:

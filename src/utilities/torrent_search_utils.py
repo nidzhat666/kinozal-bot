@@ -142,14 +142,17 @@ def format_torrent_search_results(
         seeds = result.seeds if result.seeds is not None else "?"
         peers = result.peers if result.peers is not None else "?"
         button_label = f"{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
-        movie_details_uuid = redis_callback_save(
-            {
-                "action": MOVIE_DETAILED_CALLBACK,
-                "movie_id": result.id,
-                "movie_details": result.model_dump(mode="json", by_alias=True, exclude_none=True),
-                "results_cache_key": results_cache_key,
-            }
-        )
+        movie_details_payload = None
+        if result.has_full_details:
+            movie_details_payload = result.model_dump(mode="json", by_alias=True, exclude_none=True)
+        callback_payload = {
+            "action": MOVIE_DETAILED_CALLBACK,
+            "movie_id": result.id,
+            "results_cache_key": results_cache_key,
+        }
+        if movie_details_payload is not None:
+            callback_payload["movie_details"] = movie_details_payload
+        movie_details_uuid = redis_callback_save(callback_payload)
         buttons.append([InlineKeyboardButton(text=button_label, callback_data=movie_details_uuid)])
 
     if back_callback_key:

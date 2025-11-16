@@ -36,6 +36,7 @@ class MovieSearchResult(MovieDetails):
     search_name: str | None = None
     seeds: int | None = None
     peers: int | None = None
+    has_full_details: bool = False
 
     @classmethod
     def from_search_data(
@@ -47,6 +48,7 @@ class MovieSearchResult(MovieDetails):
         details: MovieDetails,
         seeds: int | None = None,
         peers: int | None = None,
+        has_full_details: bool = False,
     ) -> "MovieSearchResult":
         return cls(
             movie_id=str(search_id),
@@ -54,5 +56,6 @@ class MovieSearchResult(MovieDetails):
             search_name=search_name,
             seeds=seeds,
             peers=peers,
+            has_full_details=has_full_details,
             **details.model_dump(),
         )
