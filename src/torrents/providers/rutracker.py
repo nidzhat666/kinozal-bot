@@ -6,6 +6,7 @@ from models.movie_detail_service_types import MovieDetails
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from models.movie_detail_service_types import MovieSearchResult
 
+
 def get_url(path: str = "") -> str:
     return f"https://{RUTRACKER_URL}{path}"
 
@@ -24,9 +25,6 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
         if response.status_code != 302:
             raise RutrackerApiError("Failed to authenticate")
     return {"bb_session": response.cookies.get("bb_session")}
-
-
-
 
 
 class RutrackerTorrentProvider(TorrentProviderProtocol):

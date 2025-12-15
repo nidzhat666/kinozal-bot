@@ -80,11 +80,15 @@ class KinopoiskMovieBase(BaseModel):
     poster: KinopoiskPoster | None = None
     rating: KinopoiskRating | None = None
     votes: KinopoiskVotes | None = None
-    release_years: list[KinopoiskReleaseYear] = Field(default_factory=list, alias="releaseYears")
+    release_years: list[KinopoiskReleaseYear] = Field(
+        default_factory=list, alias="releaseYears"
+    )
 
 
 class KinopoiskMovieDetails(KinopoiskMovieBase):
-    seasons_info: list[KinopoiskSeasonInfo] = Field(default_factory=list, alias="seasonsInfo")
+    seasons_info: list[KinopoiskSeasonInfo] = Field(
+        default_factory=list, alias="seasonsInfo"
+    )
 
 
 class KinopoiskSearchResponse(BaseModel):
@@ -116,4 +120,3 @@ __all__ = [
     "KinopoiskSeasonListResponse",
     "KinopoiskVotes",
 ]
-

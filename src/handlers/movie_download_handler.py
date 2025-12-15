@@ -31,26 +31,36 @@ async def handle_movie_download(callback_query: CallbackQuery):
         await handle_status_command(callback_query.message)
         logger.info("Movie successfully added to qBittorrent.")
     except Exception as e:
-        logger.error(f"Error in handling movie download for ID {movie_id}: {e}", exc_info=True)
+        logger.error(
+            f"Error in handling movie download for ID {movie_id}: {e}", exc_info=True
+        )
         await callback_query.answer(f"Failed to add torrent to download queue: {e}")
 
 
 async def download_movie(movie_id: str) -> DownloadResult:
     try:
         file_info = await torrent_provider.download_movie(movie_id)
-        logger.info(f"Downloaded movie with ID {movie_id} to path: {file_info.file_path}")
+        logger.info(
+            f"Downloaded movie with ID {movie_id} to path: {file_info.file_path}"
+        )
         return file_info
     except Exception as e:
         logger.error(f"Error downloading movie with ID {movie_id}: {e}", exc_info=True)
         raise
 
 
-async def add_movie_to_qbt(download_result: DownloadResult,
-                           category: str = TORRENT_DEFAULT_CATEGORY):
+async def add_movie_to_qbt(
+    download_result: DownloadResult, category: str = TORRENT_DEFAULT_CATEGORY
+):
     try:
         async with await get_client(**QBT_CREDENTIALS) as qbt_client:
             await add_torrent(download_result.file_path, qbt_client, category)
-            logger.info(f"Torrent added to qBittorrent for file: {download_result.file_path}")
+            logger.info(
+                f"Torrent added to qBittorrent for file: {download_result.file_path}"
+            )
     except Exception as e:
-        logger.error(f"Error adding torrent to qBittorrent for file {download_result.file_path}: {e}", exc_info=True)
+        logger.error(
+            f"Error adding torrent to qBittorrent for file {download_result.file_path}: {e}",
+            exc_info=True,
+        )
         raise

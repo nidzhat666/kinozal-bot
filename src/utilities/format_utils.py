@@ -8,7 +8,7 @@ def format_size(size_in_bytes: int) -> str:
     :param size_in_bytes: Size in bytes.
     :return: Human-readable file size.
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
         if size_in_bytes < 1024:
             return f"{size_in_bytes:.2f} {unit}"
         size_in_bytes /= 1024

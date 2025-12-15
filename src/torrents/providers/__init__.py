@@ -3,5 +3,3 @@
 from torrents.providers.kinozal import KinozalTorrentProvider
 
 __all__ = ["KinozalTorrentProvider"]
-
-

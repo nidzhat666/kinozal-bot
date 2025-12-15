@@ -7,9 +7,7 @@ from torrents.providers import KinozalTorrentProvider
 from torrents.interfaces import TorrentProviderProtocol
 from torrents.providers.rutracker import RutrackerTorrentProvider
 
-registry.register(
-    KinozalTorrentProvider(credentials=KINOZAL_CREDENTIALS), default=True
-)
+registry.register(KinozalTorrentProvider(credentials=KINOZAL_CREDENTIALS), default=True)
 registry.register(RutrackerTorrentProvider(credentials=RUTRACKER_CREDENTIALS))
 
 

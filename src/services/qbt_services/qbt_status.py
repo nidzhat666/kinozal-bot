@@ -7,10 +7,9 @@ from aioqbt.client import APIClient
 logger = logging.getLogger(__name__)
 
 
-async def torrents_info(client: APIClient,
-                        filter_: str = None,
-                        sort: str = None,
-                        hashes: list | tuple = ()) -> list[TorrentInfo]:
+async def torrents_info(
+    client: APIClient, filter_: str = None, sort: str = None, hashes: list | tuple = ()
+) -> list[TorrentInfo]:
     """
     Get torrents info
     :param hashes:
@@ -21,23 +20,28 @@ async def torrents_info(client: APIClient,
     """
     torrents = []
     async with client:
-        for torrent in await client.torrents.info(filter=filter_,
-                                                  sort=sort, hashes=hashes):
+        for torrent in await client.torrents.info(
+            filter=filter_, sort=sort, hashes=hashes
+        ):
             torrents.append(torrent)
     return torrents
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from services.qbt_services import get_client
     from bot.config import QBT_CREDENTIALS
 
-
     async def main():
         async with await get_client(**QBT_CREDENTIALS) as qbt_client:
-            torrents = await torrents_info(qbt_client,
-                                           sort="added_on")
+            torrents = await torrents_info(qbt_client, sort="added_on")
             for torrent in torrents:
-                print(torrent.name, torrent.state, torrent.added_on, torrent.hash, torrent.progress, torrent.eta)
-
+                print(
+                    torrent.name,
+                    torrent.state,
+                    torrent.added_on,
+                    torrent.hash,
+                    torrent.progress,
+                    torrent.eta,
+                )
 
     asyncio.run(main())

@@ -10,7 +10,9 @@ class TorrentProviderRegistry:
         self._providers: dict[str, TorrentProviderProtocol] = {}
         self._default_provider: str | None = None
 
-    def register(self, provider: TorrentProviderProtocol, *, default: bool = False) -> None:
+    def register(
+        self, provider: TorrentProviderProtocol, *, default: bool = False
+    ) -> None:
         self._providers[provider.name] = provider
         if default or not self._default_provider:
             self._default_provider = provider.name
@@ -42,5 +44,3 @@ class TorrentProviderRegistry:
 
 
 registry = TorrentProviderRegistry()
-
-

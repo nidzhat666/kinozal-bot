@@ -6,7 +6,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 from aiogram.utils.text_decorations import html_decoration
 
 from bot.config import QBT_CREDENTIALS
-from bot.constants import MOVIE_DETAILED_CALLBACK, DOWNLOAD_TORRENT_CALLBACK, SEARCH_MOVIE_CALLBACK
+from bot.constants import (
+    MOVIE_DETAILED_CALLBACK,
+    DOWNLOAD_TORRENT_CALLBACK,
+    SEARCH_MOVIE_CALLBACK,
+)
 from models.movie_detail_service_types import MovieDetails, MovieSearchResult
 from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
@@ -78,7 +82,9 @@ async def send_movie_details(
         categories,
         results_cache_key,
     )
-    await callback_query.message.edit_text(message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    await callback_query.message.edit_text(
+        message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+    )
 
 
 def create_reply_markup(
@@ -97,8 +103,9 @@ def create_reply_markup(
                     category=category,
                     query=query,
                 )
-            )
-        ) for category in categories
+            ),
+        )
+        for category in categories
     ]
 
     back_button_data = {
@@ -106,13 +113,23 @@ def create_reply_markup(
         "results_cache_key": results_cache_key,
     }
 
-    return InlineKeyboardMarkup(inline_keyboard=[
-        download_buttons,
-        [InlineKeyboardButton(text="Назад к результатам поиска",
-                              callback_data=handlers_utils.redis_callback_save(back_button_data))],
-        [InlineKeyboardButton(text="Открыть в Кинозале",
-                              url=kinozal_utils.get_url(f"/details.php?id={movie_id}"))]
-    ])
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            download_buttons,
+            [
+                InlineKeyboardButton(
+                    text="Назад к результатам поиска",
+                    callback_data=handlers_utils.redis_callback_save(back_button_data),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="Открыть в Кинозале",
+                    url=kinozal_utils.get_url(f"/details.php?id={movie_id}"),
+                )
+            ],
+        ]
+    )
 
 
 def format_movie_details_message(movie_details: MovieDetails) -> str:

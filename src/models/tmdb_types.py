@@ -49,7 +49,9 @@ class TmdbTVShowSearchResult(TmdbSearchResult):
 
 class TmdbSearchResponse(TmdbBase):
     page: int
-    results: list[TmdbMovieSearchResult | TmdbTVShowSearchResult] = Field(default_factory=list)
+    results: list[TmdbMovieSearchResult | TmdbTVShowSearchResult] = Field(
+        default_factory=list
+    )
     total_pages: int = Field(alias="total_pages")
     total_results: int = Field(alias="total_results")
 

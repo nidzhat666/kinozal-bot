@@ -37,5 +37,4 @@ def redis_callback_get(callback_key: str):
 
 def check_action(callback_data: str, action: str) -> bool:
     callback_data = redis_callback_get(callback_data)
-    return (callback_data and
-            callback_data.get("action") == action)
+    return callback_data and callback_data.get("action") == action

@@ -101,7 +101,9 @@ class KinopoiskService(SearchProvider):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.request(method, url, headers=headers, params=params)
+                response = await client.request(
+                    method, url, headers=headers, params=params
+                )
         except httpx.HTTPError as exc:
             message = f"Kinopoisk request to {url} failed: {exc}"
             logger.error(message)
@@ -132,7 +134,9 @@ class KinopoiskService(SearchProvider):
             is_series=movie.is_series,
         )
 
-    def _to_media_details(self, details: KinopoiskMovieDetails, seasons: list[KinopoiskSeason]) -> MediaDetails:
+    def _to_media_details(
+        self, details: KinopoiskMovieDetails, seasons: list[KinopoiskSeason]
+    ) -> MediaDetails:
         base = self._movie_base_to_media_item(details)
         season_details = [
             SeasonDetails(

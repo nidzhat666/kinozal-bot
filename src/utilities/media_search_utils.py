@@ -10,7 +10,11 @@ from aiogram.types import (
 )
 from pydantic import ValidationError
 
-from bot.constants import MEDIA_LIST_CALLBACK, MEDIA_SELECT_CALLBACK, SEASON_SELECT_CALLBACK
+from bot.constants import (
+    MEDIA_LIST_CALLBACK,
+    MEDIA_SELECT_CALLBACK,
+    SEASON_SELECT_CALLBACK,
+)
 from models.movie_detail_service_types import MovieSearchResult
 from models.search_provider_types import MediaDetails, MediaItem
 from services.exceptions import KinopoiskApiError, NoResultsFoundError, TmdbApiError
@@ -43,13 +47,19 @@ async def show_media_results(
                 "action": MEDIA_SELECT_CALLBACK,
                 "query": query,
                 "movie_id": movie.provider_id,
-                "movie": movie.model_dump(mode="json", by_alias=True, exclude_none=True),
+                "movie": movie.model_dump(
+                    mode="json", by_alias=True, exclude_none=True
+                ),
                 "requested_item": requested_item,
                 "requested_type": requested_type,
             }
         )
         media_type_label = "Сериал" if movie.is_series else "Фильм"
-        caption = f"{media_type_label}: {movie.title} ({movie.year})" if movie.year else movie.title
+        caption = (
+            f"{media_type_label}: {movie.title} ({movie.year})"
+            if movie.year
+            else movie.title
+        )
         buttons.append([InlineKeyboardButton(text=caption, callback_data=callback_key)])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -103,7 +113,11 @@ async def show_season_choices(
         }
     )
     buttons.append(
-        [InlineKeyboardButton(text="Назад к результатам поиска", callback_data=back_callback)]
+        [
+            InlineKeyboardButton(
+                text="Назад к результатам поиска", callback_data=back_callback
+            )
+        ]
     )
 
     title = movie_details.title
@@ -146,7 +160,9 @@ async def get_details_from_callback(
                     base_info = MediaItem.model_validate(movie_payload)
                     return MediaDetails(**base_info.model_dump())
                 except ValidationError:
-                    logger.debug("Failed to build MediaDetails from cached data without movie_id.")
+                    logger.debug(
+                        "Failed to build MediaDetails from cached data without movie_id."
+                    )
         return None
 
     # Always try to fetch fresh details first to get season info.

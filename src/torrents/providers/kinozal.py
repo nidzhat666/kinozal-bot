@@ -25,6 +25,7 @@ from utilities.kinozal_utils import get_url
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass(slots=True)
 class _RawSearchItem:
     movie_id: str
@@ -97,9 +98,7 @@ async def _fetch_movie_details(movie_id: int | str) -> MovieDetails:
     return _parse_movie_details(html)
 
 
-async def _get_text(
-    path: str, *, params: dict[str, str | int] | None = None
-) -> str:
+async def _get_text(path: str, *, params: dict[str, str | int] | None = None) -> str:
     url = get_url(path)
     try:
         async with aiohttp.ClientSession() as session:
@@ -234,7 +233,9 @@ def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
             imdb_value = imdb_span.get_text(strip=True)
 
     kinopoisk_value = "-"
-    if kinopoisk_anchor := soup.find("a", href=lambda href: href and "kinopoisk.ru" in href):
+    if kinopoisk_anchor := soup.find(
+        "a", href=lambda href: href and "kinopoisk.ru" in href
+    ):
         if kinopoisk_span := kinopoisk_anchor.find("span"):
             kinopoisk_value = kinopoisk_span.get_text(strip=True)
 
@@ -312,7 +313,9 @@ async def _download_movie(
                     )
                 payload = await response.read()
     except aiohttp.ClientError as exc:
-        error_message = f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
+        error_message = (
+            f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
+        )
         logger.error(error_message)
         raise KinozalApiError(error_message) from exc
 
@@ -386,4 +389,3 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
         return await _download_movie(movie_id, self._credentials)
-

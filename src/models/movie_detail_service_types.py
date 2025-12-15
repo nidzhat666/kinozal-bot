@@ -1,4 +1,26 @@
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class VideoQuality(StrEnum):
+    UHD_4K = "4K"
+    FHD_1080P = "1080p"
+    HD_1080I = "1080i"
+    HD_720P = "720p"
+
+    @property
+    def keywords(self) -> list[str]:
+        match self:
+            case VideoQuality.UHD_4K:
+                return ["2160p", "4k", "uhd"]
+            case VideoQuality.FHD_1080P:
+                return ["1080p", "fhd"]
+            case VideoQuality.HD_1080I:
+                return ["1080i"]
+            case VideoQuality.HD_720P:
+                return ["720p", "hd"]
+        return []
 
 
 class MovieRatings(BaseModel):
@@ -10,9 +32,11 @@ class TorrentDetails(BaseModel):
     key: str
     value: str | None = None
 
+
 class AudioLanguage(BaseModel):
-    language: str # RUS, ENG, UKR, ...
-    quality: str # DUB, SUB, Original, ...
+    language: str  # RUS, ENG, UKR, ...
+    quality: str  # DUB, SUB, Original, ...
+
 
 class MovieDetails(BaseModel):
     name: str

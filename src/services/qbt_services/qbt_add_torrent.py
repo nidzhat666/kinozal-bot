@@ -19,7 +19,7 @@ async def add_torrent(torrent_file_path: str, client: APIClient, category: str):
         form = AddFormBuilder.with_client(client)
         form = form.category(category)
         form = form.auto_tmm(True)
-        with open(torrent_file_path, 'rb') as f:
+        with open(torrent_file_path, "rb") as f:
             logging.debug(f"Reading torrent file: {torrent_file_path}")
             torrent_content = f.read()
             form = form.include_file(torrent_content, filename=torrent_file_path)
