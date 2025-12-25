@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from itertools import groupby
 
@@ -37,66 +38,70 @@ async def perform_torrent_search(
     media_details: MediaDetails | None = None,
     season_number: int | None = None,
 ) -> None:
-    logger.info("Searching torrents for query '%s' (season=%s)", query, season_number)
+    queries = {query}
+
+    if media_details:
+        suffix = ""
+        season_variants_str = ""
+        
+        if season_number is not None and media_details.is_series:
+            s_num = str(season_number)
+            season_variants = [
+                f"сезон {s_num}",
+                f"season {s_num}",
+                f"S{season_number:02d}",
+            ]
+            season_variants_str = f" ({'|'.join(season_variants)})"
+        elif media_details.year and not media_details.is_series:
+            suffix = f" ({media_details.year})"
+
+        titles_to_check = [
+            t for t in [media_details.title, media_details.original_title] if t
+        ]
+        
+        for title in titles_to_check:
+            clean_title = clean_title_for_query(title)
+            if season_variants_str:
+                queries.add(f"{clean_title}{season_variants_str}")
+            else:
+                queries.add(f"{clean_title}{suffix}")
+
+    queries = {q for q in queries if q.strip()}
+    logger.info("Performing parallel search for queries: %s", queries)
 
     provider = get_torrent_provider()
     target_message = callback_query.message if callback_query else message
 
-    try:
-        raw_results = await provider.search(
-            query,
+    tasks = [
+        provider.search(
+            q,
             requested_item=requested_item,
             requested_type=requested_type,
         )
+        for q in queries
+    ]
+
+    try:
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        raw_results = []
+        for res in results_list:
+            if isinstance(res, Exception):
+                logger.warning(f"Search failed for one of the queries: {res}")
+            elif isinstance(res, list):
+                raw_results.extend(res)
+
     except Exception as exc:
         logger.error(
-            "Torrent search failed for query '%s': %s", query, exc, exc_info=True
+            "Torrent search critical failure: %s", exc, exc_info=True
         )
         await target_message.edit_text("Не удалось выполнить поиск по торрентам.")
         return
 
     results = _filter_and_process_results(raw_results, media_details, season_number)
 
-    if not results and media_details and media_details.original_title:
-        original_title_clean = clean_title_for_query(media_details.original_title)
-
-        if original_title_clean.lower() not in query.lower():
-            logger.info(
-                "Primary search failed. Attempting fallback search by original_title: '%s'",
-                original_title_clean,
-            )
-
-            parts = [original_title_clean]
-            if season_number is not None and media_details.is_series:
-                s_num = str(season_number)
-                season_variants = [
-                    f"сезон {s_num}",
-                    f"season {s_num}",
-                    f"S{season_number:02d}",
-                ]
-                parts.append(f"({'|'.join(season_variants)})")
-            elif media_details.year and not media_details.is_series:
-                parts.append(f"({media_details.year})")
-
-            alt_query = " + ".join(parts)
-
-            try:
-                raw_results = await provider.search(
-                    alt_query,
-                    requested_item=requested_item,
-                    requested_type=requested_type,
-                )
-                results = _filter_and_process_results(
-                    raw_results, media_details, season_number
-                )
-                if results:
-                    query = alt_query
-                    logger.info("Fallback search succeeded with %d results", len(results))
-            except Exception as exc:
-                logger.warning("Fallback search failed: %s", exc)
-
     if not results:
-        logger.info("No torrent results found after filtering for query '%s'", query)
+        logger.info("No torrent results found after filtering")
         await target_message.edit_text("По запросу ничего не найдено.")
         return
 
@@ -125,13 +130,12 @@ async def perform_torrent_search(
         message_text = f"Выберите результат{' для «' + requested_item + '»' if requested_item else ''}:"
         await target_message.edit_text(message_text, reply_markup=keyboard)
         logger.info(
-            "Sent %d torrent search results for query '%s'", len(results), query
+            "Sent %d torrent search results (merged from %d queries)", len(results), len(queries)
         )
 
     except Exception as exc:
         logger.error(
-            "Failed to send torrent search results for query '%s': %s",
-            query,
+            "Failed to send torrent search results: %s",
             exc,
             exc_info=True,
         )
