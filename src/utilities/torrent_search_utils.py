@@ -57,6 +57,44 @@ async def perform_torrent_search(
 
     results = _filter_and_process_results(raw_results, media_details, season_number)
 
+    if not results and media_details and media_details.original_title:
+        original_title_clean = clean_title_for_query(media_details.original_title)
+
+        if original_title_clean.lower() not in query.lower():
+            logger.info(
+                "Primary search failed. Attempting fallback search by original_title: '%s'",
+                original_title_clean,
+            )
+
+            parts = [original_title_clean]
+            if season_number is not None and media_details.is_series:
+                s_num = str(season_number)
+                season_variants = [
+                    f"сезон {s_num}",
+                    f"season {s_num}",
+                    f"S{season_number:02d}",
+                ]
+                parts.append(f"({'|'.join(season_variants)})")
+            elif media_details.year and not media_details.is_series:
+                parts.append(f"({media_details.year})")
+
+            alt_query = " + ".join(parts)
+
+            try:
+                raw_results = await provider.search(
+                    alt_query,
+                    requested_item=requested_item,
+                    requested_type=requested_type,
+                )
+                results = _filter_and_process_results(
+                    raw_results, media_details, season_number
+                )
+                if results:
+                    query = alt_query
+                    logger.info("Fallback search succeeded with %d results", len(results))
+            except Exception as exc:
+                logger.warning("Fallback search failed: %s", exc)
+
     if not results:
         logger.info("No torrent results found after filtering for query '%s'", query)
         await target_message.edit_text("По запросу ничего не найдено.")
