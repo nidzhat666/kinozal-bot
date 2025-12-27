@@ -122,6 +122,7 @@ async def perform_torrent_search(
             results_cache_key,
             back_callback_key=back_callback_key,
             back_button_text=back_button_text,
+            media_details=media_details,
         )
         if not keyboard.inline_keyboard:
             await target_message.edit_text("По запросу ничего не найдено.")
@@ -219,37 +220,54 @@ def format_torrent_search_results(
     *,
     back_callback_key: str | None = None,
     back_button_text: str | None = None,
+    media_details: MediaDetails | None = None,
 ) -> InlineKeyboardMarkup:
-    buttons = []
-
-    for result in results:
-        quality = result.video_quality or "N/A"
-        size = result.size or "N/A"
-        seeds = result.seeds if result.seeds is not None else "?"
-        peers = result.peers if result.peers is not None else "?"
-
-        button_label = f"{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
-
-        callback_payload = {
-            "action": MOVIE_DETAILED_CALLBACK,
-            "movie_id": result.id,
-            "results_cache_key": results_cache_key,
-        }
-
-        if result.has_full_details:
-            callback_payload["movie_details"] = result.model_dump(
-                mode="json", by_alias=True, exclude_none=True
-            )
-
-        movie_details_uuid = redis_callback_save(callback_payload)
-        buttons.append(
-            [InlineKeyboardButton(text=button_label, callback_data=movie_details_uuid)]
-        )
+    """Format torrent search results into Telegram inline keyboard."""
+    buttons = [
+        _create_result_button(result, results_cache_key, media_details)
+        for result in results
+    ]
 
     if back_callback_key:
-        back_text = back_button_text or "Назад"
-        buttons.append(
-            [InlineKeyboardButton(text=back_text, callback_data=back_callback_key)]
-        )
+        buttons.append([
+            InlineKeyboardButton(
+                text=back_button_text or "Назад",
+                callback_data=back_callback_key
+            )
+        ])
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def _create_result_button(
+    result: MovieSearchResult,
+    results_cache_key: str,
+    media_details: MediaDetails | None,
+) -> list[InlineKeyboardButton]:
+    """Create a single result button with metadata."""
+    quality = result.video_quality or "N/A"
+    size = result.size or "N/A"
+    seeds = result.seeds if result.seeds is not None else "?"
+    peers = result.peers if result.peers is not None else "?"
+    
+    label = f"{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
+    
+    payload = {
+        "action": MOVIE_DETAILED_CALLBACK,
+        "movie_id": result.id,
+        "results_cache_key": results_cache_key,
+    }
+    
+    if media_details:
+        payload["tmdb_info"] = {
+            "original_title": media_details.original_title,
+            "year": media_details.year,
+        }
+    
+    if result.has_full_details:
+        payload["movie_details"] = result.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
+    
+    callback_data = redis_callback_save(payload)
+    return [InlineKeyboardButton(text=label, callback_data=callback_data)]

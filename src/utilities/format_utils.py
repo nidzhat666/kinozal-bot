@@ -1,13 +1,9 @@
+import re
 from datetime import datetime
 
 
 def format_size(size_in_bytes: int) -> str:
-    """
-    Convert a file size in bytes to a human-readable format.
-
-    :param size_in_bytes: Size in bytes.
-    :return: Human-readable file size.
-    """
+    """Convert bytes to human-readable format (B, KB, MB, GB, TB)."""
     for unit in ["B", "KB", "MB", "GB", "TB"]:
         if size_in_bytes < 1024:
             return f"{size_in_bytes:.2f} {unit}"
@@ -16,46 +12,37 @@ def format_size(size_in_bytes: int) -> str:
 
 
 def format_percentage(value: float) -> str:
-    """
-    Convert a decimal fraction to a percentage string.
-
-    :param value: Decimal fraction.
-    :return: Percentage string.
-    """
+    """Convert decimal fraction (0.0-1.0) to percentage string."""
     return f"{value * 100:.2f}%"
 
 
 def format_speed(speed_in_bytes_per_second: int) -> str:
-    """
-    Convert speed from bytes per second to a human-readable format.
-
-    :param speed_in_bytes_per_second: Speed in bytes per second.
-    :return: Human-readable speed string.
-    """
-    return format_size(speed_in_bytes_per_second) + "/s"
+    """Convert bytes/second to human-readable format."""
+    return f"{format_size(speed_in_bytes_per_second)}/s"
 
 
 def format_date(dt: datetime | None) -> str:
-    """
-    Format a UNIX timestamp into a human-readable date.
-
-    :param dt: datetime object or None.
-    :return: Formatted date string or "N/A".
-    """
-    if dt:
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    return "N/A"
+    """Format datetime to YYYY-MM-DD HH:MM:SS or 'N/A' if None."""
+    return dt.strftime("%Y-%m-%d %H:%M:%S") if dt else "N/A"
 
 
 def format_eta(eta: float) -> str:
-    """
-    Converts ETA in seconds to a human-readable format.
-
-    :param eta: Estimated time of arrival in seconds.
-    :return: Human-readable ETA.
-    """
-    if eta < 0 or eta >= 86400 * 365:  # 365 days
+    """Convert ETA in seconds to human-readable format (e.g., '2h 15m 30s left')."""
+    if eta < 0 or eta >= 31536000:  # 365 days in seconds
         return "∞"
-    hours, remainder = divmod(eta, 3600)
+    hours, remainder = divmod(int(eta), 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours}h {minutes}m {seconds}s left"
+
+
+def sanitize_fs_name(name: str, max_length: int = 180) -> str:
+    """Sanitize string for use as filesystem name (removes invalid chars, limits length)."""
+    name = re.sub(r'[\\/:*?"<>|]', "", name)
+    name = re.sub(r"[\x00-\x1f]", "", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    name = name.rstrip(".")
+    
+    if len(name) > max_length:
+        name = name[:max_length].strip()
+        
+    return name
