@@ -36,11 +36,11 @@ async def add_torrent_and_rename(
 ) -> None:
     """Add torrent to qBittorrent and rename based on TMDB metadata."""
     logger.info(f"Adding torrent: {torrent_file_path}")
-    
+    torrent_name = get_torrent_name(original_title or "", year)
     async with client:
         before_hashes = await _get_torrent_hashes(client)
-        
-        await _add_torrent(client, torrent_file_path, category)
+
+        await _add_torrent(client, torrent_file_path, category, torrent_name)
         
         if not original_title:
             logger.info("No original title provided. Rename skipped.")
@@ -54,7 +54,7 @@ async def add_torrent_and_rename(
             logger.error("Torrent added but new hash not found (timeout). Rename skipped.")
             return
 
-        await _rename_torrent(client, new_hash, original_title, year)
+        await _rename_torrent(client, new_hash, torrent_name)
 
 
 async def _get_torrent_hashes(client: APIClient) -> set[str] | None:
@@ -67,11 +67,12 @@ async def _get_torrent_hashes(client: APIClient) -> set[str] | None:
         return None
 
 
-async def _add_torrent(client: APIClient, file_path: str, category: str) -> None:
+async def _add_torrent(client: APIClient, file_path: str, category: str, torrent_name: str) -> None:
     """Add torrent file to qBittorrent."""
     form = AddFormBuilder.with_client(client)
     form = form.category(category).auto_tmm(True)
-    
+
+    form = form.rename(torrent_name)
     with open(file_path, "rb") as f:
         form = form.include_file(f.read(), filename=file_path)
     
@@ -106,15 +107,18 @@ async def _wait_for_new_hash(
     return None
 
 
+def get_torrent_name(title: str, year: int | str | None) -> str:
+    return sanitize_fs_name(
+        f"{title} ({year})" if year else title
+    )
+
 async def _rename_torrent(
-    client: APIClient,
-    torrent_hash: str,
-    title: str,
-    year: int | str | None,
+        client: APIClient,
+        torrent_hash: str,
+        torrent_name: str,
 ) -> None:
     """Rename torrent files/folder based on title and year."""
-    new_name = sanitize_fs_name(f"{title} ({year})" if year else title)
-    logger.info(f"Attempting to rename torrent {torrent_hash} to '{new_name}'")
+    logger.info(f"Attempting to rename torrent {torrent_hash} to '{torrent_name}'")
     
     try:
         files = await client.torrents.files(torrent_hash)
@@ -126,7 +130,7 @@ async def _rename_torrent(
         logger.warning(f"No files found for torrent {torrent_hash}")
         return
 
-    rename_info = _analyze_torrent_structure(files, new_name)
+    rename_info = _analyze_torrent_structure(files, torrent_name)
     
     if rename_info.old_name == rename_info.new_name:
         logger.info("Name already matches target. No rename needed.")
