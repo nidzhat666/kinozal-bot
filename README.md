@@ -13,7 +13,7 @@ Kinozal Bot is your personal movie assistant on Telegram. It allows you to:
 - Manage your downloads via qBittorrent (start, pause, delete, check status).
 - Automatically refresh your Plex library after downloads.
 
-Built with Python, it's easy to set up and customize for your media server needs.
+Built with **FastAPI** and **Aiogram**, it supports both long-polling (for development) and webhooks (for production).
 
 ## ✨ Features
 
@@ -22,7 +22,7 @@ Built with Python, it's easy to set up and customize for your media server needs
 - **Torrent Management**: Add, pause, resume, delete torrents, and view detailed statuses.
 - **Plex Integration**: Trigger library scans to update your media collection.
 - **Multi-Source Support**: Pull data from multiple torrent and movie info providers.
-- **User-Friendly Interface**: Intuitive Telegram commands and inline keyboards.
+- **Hybrid Architecture**: Runs on FastAPI, allowing for HTTP API extensions (metrics, health checks, webhooks).
 
 ## 📸 Screenshots
 
@@ -32,25 +32,17 @@ Here are some examples of how the bot works.
 
 *Searching for a movie and viewing results.*
 
-
-
 ![Series Season Choice](screenshots/series_seasons.png)
 
 *Selecting a season to view episodes.*
-
-
 
 ![Torrents List](screenshots/torrents_list.png)
 
 *Viewing available torrents for a movie.*
 
-
-
 ![Torrent Download](screenshots/download.png)
 
 *Selecting and downloading a torrent.*
-
-
 
 ![Torrent Management List](screenshots/management.png)
 ![Torrent Management Detail](screenshots/management_detail.png)
@@ -67,11 +59,12 @@ Follow these steps to get Kinozal Bot up and running.
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.12+
 - Docker (optional but recommended)
 - Telegram Bot Token (from BotFather)
 - API keys for Kinopoisk, TMDB, etc.
 - qBittorrent and Plex setup
+- `uv` package manager (optional, but recommended)
 
 ### Installation
 
@@ -100,22 +93,35 @@ Follow these steps to get Kinozal Bot up and running.
    uv sync
    ```
 
-   Or with pip:
+### 🏃‍♂️ Running the Bot
+
+#### Local Development (Polling Mode)
+
+To run the bot locally without setting up webhooks (ngrok not required):
+
+1. Set `USE_POLLING=True` in your `.env` file.
+2. Run the server:
 
    ```bash
-   pip install -e .
+   uv run uvicorn src.bot.main:app --reload --host 0.0.0.0 --port 8000
+   ```
+   
+   *Note: `--reload` enables auto-restart on code changes.*
+
+#### Production (Webhook Mode)
+
+1. Ensure `USE_POLLING=False` (or remove it) in `.env`.
+2. Set `BASE_URL` to your public domain (e.g., `https://your-bot.com`).
+3. Run using Docker:
+
+   ```bash
+   docker-compose up -d --build
    ```
 
-4. **Run with Docker**
-
+   Or manually:
+   
    ```bash
-   docker-compose up -d
-   ```
-
-   For qBittorrent-specific compose:
-
-   ```bash
-   docker-compose -f docker-compose-qbt.yaml up -d
+   uv run uvicorn src.bot.main:app --host 0.0.0.0 --port 8000
    ```
 
 ## 📖 How to Use

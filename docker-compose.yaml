@@ -10,6 +10,8 @@ services:
     image: nidzhat/kinozal_bot:latest
     restart: always
     env_file: .env
+    ports:
+      - "64873:8000"
     stdin_open: true # docker run -i
 
 volumes:

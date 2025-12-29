@@ -1,10 +1,12 @@
 SEARCH_COMMAND = "search"
 STATUS_COMMAND = "status"
 REFRESH_PLEX_COMMAND = "refresh_plex"
+TRANSCODE_STATUS_COMMAND = "transcode_status"
 TORRENT_DEFAULT_CATEGORY = "Movies"
 
 # Callbacks Actions
 REFRESH_CALLBACK = "qbt-refresh"
+TRANSCODE_REFRESH_CALLBACK = "transcode-refresh"
 TORRENT_DETAILED_CALLBACK = "qbt-torrent-detailed"
 MOVIE_DETAILED_CALLBACK = "movie_detailed"
 DOWNLOAD_TORRENT_CALLBACK = "download_torrent"

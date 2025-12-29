@@ -1,0 +1,60 @@
+# GPU-enabled Dockerfile with NVIDIA NVENC support
+# Requires: nvidia-docker2 or Docker with NVIDIA Container Toolkit
+
+FROM nvidia/cuda:12.3.1-runtime-ubuntu22.04
+
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Python 3.12, FFmpeg with NVENC, and other dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    curl \
+    ca-certificates \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    # FFmpeg with NVENC support (from jellyfin repo has good NVENC builds)
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /etc/apt/keyrings/jellyfin.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/jellyfin.gpg] https://repo.jellyfin.org/ubuntu jammy main" > /etc/apt/sources.list.d/jellyfin.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends jellyfin-ffmpeg6 \
+    # MKVToolNix for mkvpropedit
+    && apt-get install -y --no-install-recommends mkvtoolnix \
+    # Cleanup
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create symlinks for ffmpeg and python
+RUN ln -sf /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
+    && ln -sf /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python
+
+# Install uv package manager
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && ln -s /root/.local/bin/uv /usr/local/bin/uv
+
+WORKDIR /usr/src/app
+
+# Copy dependency files first for better caching
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies
+RUN uv sync --frozen --no-install-project
+
+# Copy application code
+COPY . .
+
+WORKDIR /usr/src/app/src
+ENV PYTHONPATH=/usr/src/app/src
+
+# Verify NVENC is available
+RUN ffmpeg -hide_banner -encoders 2>/dev/null | grep -q nvenc && echo "NVENC available!" || echo "Warning: NVENC not detected"
+
+CMD ["uv", "run", "uvicorn", "bot.main:app", "--host", "0.0.0.0", "--port", "8000"]
+

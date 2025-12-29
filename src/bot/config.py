@@ -40,5 +40,12 @@ TMDB_API_TOKEN = os.getenv("TMDB_API_TOKEN")
 
 SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "tmdb").lower()
 
+BASE_URL = os.getenv("BASE_URL")
+WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
+WEB_SERVER_HOST = os.getenv("WEB_SERVER_HOST", "0.0.0.0")
+WEB_SERVER_PORT = int(os.getenv("WEB_SERVER_PORT", 8000))
+
+USE_POLLING = os.getenv("USE_POLLING", "False").lower() in ("true", "1", "yes")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

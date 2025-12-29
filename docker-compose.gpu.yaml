@@ -1,0 +1,64 @@
+# Docker Compose with NVIDIA GPU support for transcoding
+#
+# Requirements:
+# 1. NVIDIA drivers installed on host
+# 2. NVIDIA Container Toolkit installed:
+#    https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#
+# Usage:
+#   docker compose -f docker-compose.gpu.yaml up -d
+#
+# Build locally:
+#   docker compose -f docker-compose.gpu.yaml build
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    # Or use pre-built image:
+    # image: nidzhat/kinozal_bot:gpu
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: always
+    env_file: .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TRANSCODE_ENABLED=true
+    ports:
+      - "64873:8000"
+    volumes:
+      # Mount your media directories
+      - /path/to/movies:/media/movies
+      - /path/to/series:/media/series
+      # Optional: mount logs
+      - ./logs:/usr/src/app/logs
+    # GPU access
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1  # Use 1 GPU, or "all" for all GPUs
+              capabilities: [gpu, video]  # video capability for NVENC
+    stdin_open: true
+    tty: true
+
+volumes:
+  redis_data:
+    driver: local
+

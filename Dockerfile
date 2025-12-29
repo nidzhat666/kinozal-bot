@@ -15,4 +15,4 @@ COPY . .
 WORKDIR /usr/src/app/src
 ENV PYTHONPATH=/usr/src/app/src
 
-CMD ["uv", "run", "python", "bot/main.py"]
+CMD ["uv", "run", "uvicorn", "bot.main:app", "--host", "0.0.0.0", "--port", "8000"]
