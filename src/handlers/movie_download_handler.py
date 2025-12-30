@@ -56,6 +56,7 @@ async def _add_to_qbittorrent(
     async with await get_client(**QBT_CREDENTIALS) as qbt_client:
         original_title = tmdb_info.get("original_title") if tmdb_info else None
         year = tmdb_info.get("year") if tmdb_info else None
+        quality = tmdb_info.get("quality") if tmdb_info else None
 
         await add_torrent_and_rename(
             download_result.file_path,
@@ -63,5 +64,6 @@ async def _add_to_qbittorrent(
             category,
             original_title=original_title,
             year=year,
+            quality=quality,
         )
         logger.info(f"Torrent added for file: {download_result.file_path}")

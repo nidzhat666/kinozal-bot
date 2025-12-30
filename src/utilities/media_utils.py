@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from difflib import SequenceMatcher
 
 from models.search_provider_types import MediaDetails
 from models.movie_detail_service_types import VideoQuality
+
+logger = logging.getLogger(__name__)
 
 MAX_QUERY_LENGTH = 64
 
@@ -135,10 +138,45 @@ def clean_title_for_query(title: str) -> str:
 
 
 def parse_video_quality(name: str) -> str | None:
+    """Parse video quality from torrent name.
+    
+    Checks more specific qualities first (REMUX, HDR variants),
+    then generic resolutions, then source-based fallbacks.
+    """
     name_lower = name.lower()
-    for quality in VideoQuality:
+    
+    # Priority order: more specific qualities first
+    priority_order = [
+        # 4K specific variants
+        VideoQuality.UHD_4K_REMUX,
+        VideoQuality.UHD_4K_HDR_DV,
+        VideoQuality.UHD_4K_HDR,
+        # 1080p specific variants
+        VideoQuality.FHD_1080P_REMUX,
+        VideoQuality.FHD_1080P_BLURAY,
+        VideoQuality.FHD_1080P_WEB,
+        # 720p specific variants
+        VideoQuality.HD_720P_BLURAY,
+        VideoQuality.HD_720P_WEB,
+        # Generic resolutions
+        VideoQuality.UHD_4K,
+        VideoQuality.FHD_1080P,
+        VideoQuality.HD_1080I,
+        VideoQuality.HD_720P,
+        VideoQuality.SD_576P,
+        VideoQuality.SD_480P,
+        # Source-based fallbacks
+        VideoQuality.BDRIP,
+        VideoQuality.HDRIP,
+        VideoQuality.DVDRIP,
+        VideoQuality.WEBRIP,
+    ]
+    
+    for quality in priority_order:
         if any(k in name_lower for k in quality.keywords):
             return quality
+    
+    logger.warning("Unknown video quality in torrent name: %s", name)
     return None
 
 

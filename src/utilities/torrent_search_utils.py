@@ -262,6 +262,7 @@ def _create_result_button(
         payload["tmdb_info"] = {
             "original_title": media_details.original_title,
             "year": media_details.year,
+            "quality": result.video_quality,
         }
     
     if result.has_full_details:
