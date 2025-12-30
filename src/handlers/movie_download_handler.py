@@ -53,10 +53,13 @@ async def _add_to_qbittorrent(
     tmdb_info: dict | None = None,
 ) -> None:
     """Add torrent to qBittorrent with optional auto-rename."""
+    logger.info("tmdb_info received: %s", tmdb_info)
+    
     async with await get_client(**QBT_CREDENTIALS) as qbt_client:
         original_title = tmdb_info.get("original_title") if tmdb_info else None
         year = tmdb_info.get("year") if tmdb_info else None
         quality = tmdb_info.get("quality") if tmdb_info else None
+        season = tmdb_info.get("season") if tmdb_info else None
 
         await add_torrent_and_rename(
             download_result.file_path,
@@ -65,5 +68,6 @@ async def _add_to_qbittorrent(
             original_title=original_title,
             year=year,
             quality=quality,
+            season=season,
         )
         logger.info(f"Torrent added for file: {download_result.file_path}")

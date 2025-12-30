@@ -8,20 +8,25 @@ logger = logging.getLogger(__name__)
 
 
 async def torrents_info(
-    client: APIClient, filter_: str = None, sort: str = None, hashes: list | tuple = ()
+    client: APIClient,
+    filter_: str = None,
+    sort: str = None,
+    reverse: bool = False,
+    hashes: list | tuple = (),
 ) -> list[TorrentInfo]:
     """
     Get torrents info
-    :param hashes:
-    :param sort:
-    :param filter_:
-    :param client:
-    :return: list[dict]
+    :param client: qBittorrent API client
+    :param filter_: Filter torrents by state
+    :param sort: Sort torrents by field
+    :param reverse: Reverse sort order
+    :param hashes: Filter by torrent hashes
+    :return: list[TorrentInfo]
     """
     torrents = []
     async with client:
         for torrent in await client.torrents.info(
-            filter=filter_, sort=sort, hashes=hashes
+            filter=filter_, sort=sort, reverse=reverse, hashes=hashes
         ):
             torrents.append(torrent)
     return torrents

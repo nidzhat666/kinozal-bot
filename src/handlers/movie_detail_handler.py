@@ -1,4 +1,5 @@
 import logging
+import re
 
 from aiogram import Router
 from aiogram.enums.parse_mode import ParseMode
@@ -16,6 +17,7 @@ from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import kinozal_utils, handlers_utils
 from utilities.handlers_utils import check_action
+from utilities.media_utils import parse_video_quality
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -76,6 +78,12 @@ async def send_movie_details(
     """Send formatted movie details with download buttons."""
     message_caption = format_movie_details_message(movie_details)
     logger.debug(f"Sending movie details: {message_caption}")
+
+    # Fallback: if tmdb_info is missing, create from Kinozal movie details
+    if not tmdb_info:
+        logger.info("No tmdb_info provided, using Kinozal movie details as fallback")
+        tmdb_info = _create_fallback_tmdb_info(movie_details)
+        logger.info("Fallback tmdb_info: %s", tmdb_info)
 
     qbt_client = await get_client(**QBT_CREDENTIALS)
     categories = await qbt_get_categories(qbt_client)
@@ -158,3 +166,59 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         message += f"- {bold(detail.key)} {code(value)}\n"
 
     return message
+
+
+def _create_fallback_tmdb_info(movie_details: MovieDetails) -> dict:
+    """Create tmdb_info from Kinozal movie details as fallback.
+    
+    Kinozal names are usually in format:
+    - "Русское название / English Title (сезон...) / 2024 / ..."
+    - "Русское название / English Title / 2024 / ..."
+    """
+    name = movie_details.name
+    year = movie_details.year
+    quality = movie_details.video_quality
+    
+    # Try to extract English title (after " / ")
+    original_title = None
+    if " / " in name:
+        parts = name.split(" / ")
+        # Usually: [Russian, English, Year/Info, ...]
+        # English title is often the second part
+        if len(parts) >= 2:
+            # Check if second part looks like English (contains ASCII letters)
+            candidate = parts[1].strip()
+            # Remove season info like "(1 сезон...)"
+            candidate = re.sub(r'\s*\([^)]*сезон[^)]*\)', '', candidate)
+            candidate = re.sub(r'\s*\([^)]*season[^)]*\)', '', candidate, flags=re.IGNORECASE)
+            candidate = candidate.strip()
+            
+            if candidate and re.search(r'[a-zA-Z]', candidate):
+                original_title = candidate
+    
+    # If no English title found, use the full name
+    if not original_title:
+        # Clean up the name - take first part before "/"
+        original_title = name.split(" / ")[0].strip() if " / " in name else name
+        # Remove season/episode info
+        original_title = re.sub(r'\s*\([^)]*сезон[^)]*\)', '', original_title)
+        original_title = re.sub(r'\s*\([^)]*серии[^)]*\)', '', original_title)
+        original_title = original_title.strip()
+    
+    # Parse quality from name if not in movie_details
+    if not quality:
+        quality = parse_video_quality(name)
+    
+    # Parse year - it might be a string like "2024" or range "1999-2004"
+    parsed_year = None
+    if year:
+        # Extract first year from string
+        year_match = re.search(r'(\d{4})', str(year))
+        if year_match:
+            parsed_year = int(year_match.group(1))
+    
+    return {
+        "original_title": original_title,
+        "year": parsed_year,
+        "quality": quality,
+    }

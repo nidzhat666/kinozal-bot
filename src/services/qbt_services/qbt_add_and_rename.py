@@ -34,10 +34,19 @@ async def add_torrent_and_rename(
     original_title: str | None = None,
     year: int | str | None = None,
     quality: str | None = None,
+    season: int | None = None,
 ) -> None:
     """Add torrent to qBittorrent and rename based on TMDB metadata."""
-    logger.info(f"Adding torrent: {torrent_file_path}")
-    torrent_name = get_torrent_name(original_title or "", year, quality)
+    logger.info(
+        "Adding torrent: %s | title=%s, year=%s, quality=%s, season=%s",
+        torrent_file_path,
+        original_title,
+        year,
+        quality,
+        season,
+    )
+    torrent_name = get_torrent_name(original_title or "", year, quality, season)
+    logger.info("Generated torrent name: '%s'", torrent_name)
     async with client:
         before_hashes = await _get_torrent_hashes(client)
 
@@ -108,8 +117,15 @@ async def _wait_for_new_hash(
     return None
 
 
-def get_torrent_name(title: str, year: int | str | None, quality: str | None = None) -> str:
+def get_torrent_name(
+    title: str,
+    year: int | str | None,
+    quality: str | None = None,
+    season: int | None = None,
+) -> str:
     parts = [title]
+    if season is not None:
+        parts.append(f"S{season:02d}")
     if year:
         parts.append(f"({year})")
     if quality:

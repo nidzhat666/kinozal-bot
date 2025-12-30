@@ -36,6 +36,59 @@ class VideoQuality(StrEnum):
     WEBRIP = "WEBRip"
 
     @property
+    def rating_emoji(self) -> str:
+        """Return quality rating emoji based on preference ranking.
+        
+        🥇 - Gold: WEB-DL 1080p (best choice)
+        🥈 - Silver: BDRip 1080p, BluRay 1080p (great quality)
+        🥉 - Bronze: 4K WEB-DL/BDRip (optional, bigger size)
+        ⚠️ - Caution: REMUX (enthusiast only, huge size)
+        ❌ - Avoid: HDRip, WEBRip, DVDRip, 720p, SD (outdated/bad quality)
+        """
+        match self:
+            # 🥇 Gold - WEB-DL 1080p
+            case VideoQuality.FHD_1080P_WEB:
+                return "🥇"
+
+            # 🥈 Silver - BDRip 1080p
+            case VideoQuality.FHD_1080P_BDRIP:
+                return "🥈"
+
+            # 🥉 Bronze - 4K variants (except REMUX)
+            case (
+            VideoQuality.UHD_4K
+            | VideoQuality.UHD_4K_HDR
+            | VideoQuality.UHD_4K_BDRIP
+            ):
+                return "🥉"
+
+            # ⚠️ Caution - REMUX (huge files)
+            case (VideoQuality.UHD_4K_REMUX
+                  | VideoQuality.FHD_1080P_REMUX
+                  | VideoQuality.FHD_1080P_BLURAY
+                  | VideoQuality.UHD_4K_HDR_DV):
+                return "⚠️"
+
+            # ❌ Avoid - HDRip, WEBRip, DVDRip, 720p, SD, generic
+            case (
+            VideoQuality.HDRIP
+            | VideoQuality.WEBRIP
+            | VideoQuality.DVDRIP
+            | VideoQuality.HD_720P
+            | VideoQuality.HD_720P_BLURAY
+            | VideoQuality.HD_720P_WEB
+            | VideoQuality.HD_720P_BDRIP
+            | VideoQuality.SD_576P
+            | VideoQuality.SD_480P
+            | VideoQuality.HD_1080I
+            | VideoQuality.FHD_1080P
+            | VideoQuality.BDRIP
+            ):
+                return "❌"
+
+        return "❓"
+
+    @property
     def match_rules(self) -> list[tuple[list[str], list[str]]]:
         """Returns list of (required_all, required_any) tuples.
         
@@ -86,6 +139,7 @@ class VideoQuality(StrEnum):
             case VideoQuality.FHD_1080P_WEB:
                 return [
                     (["1080p"], ["web-dl", "webdl"]),
+                    (["web-dl", "webdl"], ["1080p", "fhd"]),
                 ]
             case VideoQuality.FHD_1080P_BDRIP:
                 return [
@@ -109,6 +163,7 @@ class VideoQuality(StrEnum):
             case VideoQuality.HD_720P_WEB:
                 return [
                     (["720p"], ["web-dl", "webdl"]),
+                    (["web-dl", "webdl"], ["720p"]),
                 ]
             case VideoQuality.HD_720P_BDRIP:
                 return [
@@ -151,6 +206,8 @@ class VideoQuality(StrEnum):
                 return [
                     (["webrip"], []),
                     (["web-rip"], []),
+                    (["web-dlrip"], []),
+                    (["webdlrip"], []),
                 ]
         return []
 

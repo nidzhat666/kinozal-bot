@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections import Counter
 from itertools import groupby
 
@@ -124,6 +125,7 @@ async def perform_torrent_search(
             back_callback_key=back_callback_key,
             back_button_text=back_button_text,
             media_details=media_details,
+            season_number=season_number,
         )
         if not keyboard.inline_keyboard:
             await target_message.edit_text("По запросу ничего не найдено.")
@@ -152,6 +154,9 @@ def _filter_and_process_results(
     seen_movie_ids = set()
     results = []
     quality_counter: Counter[str] = Counter()
+    
+    # Stats for debugging
+    skip_reasons: Counter[str] = Counter()
 
     expected_titles = []
     if media_details:
@@ -160,29 +165,58 @@ def _filter_and_process_results(
         ]
 
     for result in raw_results:
-        if result.id in seen_movie_ids or not result.seeds:
+        result_name = result.search_name or result.name
+        
+        if result.id in seen_movie_ids:
+            skip_reasons["duplicate"] += 1
+            continue
+            
+        if not result.seeds:
+            skip_reasons["no_seeds"] += 1
             continue
 
         if not result.video_quality:
-            result.video_quality = parse_video_quality(
-                result.search_name or result.name
-            )
-
-        result_name = result.search_name or result.name
+            result.video_quality = parse_video_quality(result_name)
 
         if season_number is not None and not is_season_match(
             result_name, season_number
         ):
+            skip_reasons["season_mismatch"] += 1
+            logger.info(
+                "SKIP season_mismatch (S%02d): [%s] %s",
+                season_number,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
             continue
 
         if expected_titles and not _is_fuzzy_match(result_name, expected_titles):
+            skip_reasons["title_mismatch"] += 1
+            logger.info(
+                "SKIP title_mismatch: [%s] %s",
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
             continue
 
         seen_movie_ids.add(result.id)
         results.append(result)
         quality_counter[result.video_quality or "Unknown"] += 1
+        logger.info(
+            "ACCEPTED: [%s] seeds=%s %s",
+            result.video_quality or "N/A",
+            result.seeds,
+            result_name[:80],
+        )
 
     _log_quality_stats(quality_counter, len(raw_results), len(results))
+    
+    if skip_reasons:
+        logger.info(
+            "Skip reasons: %s",
+            ", ".join(f"{reason}: {count}" for reason, count in skip_reasons.most_common()),
+        )
+    
     return results
 
 
@@ -209,13 +243,50 @@ def _log_quality_stats(
 
 
 def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
+    """Check if result name matches expected titles with stricter matching.
+    
+    Matches if:
+    1. Expected title is at the start of result name (with optional prefix like "сезон")
+    2. Expected title is the main title (before separators like ":", "/", "-")
+    3. High similarity (>0.7) for fuzzy matching
+    """
     result_clean = clean_title_for_query(result_name).lower()
 
     for expected in expected_titles:
         expected_clean = clean_title_for_query(expected).lower()
-        if expected_clean in result_clean:
+        
+        # Remove common prefixes first
+        prefixes = ["сезон", "season", "s"]
+        result_without_prefix = result_clean
+        for prefix in prefixes:
+            # Match "сезон 1", "season 1", "s01", etc.
+            prefix_pattern = rf'^{re.escape(prefix)}\s*\d+'
+            if re.match(prefix_pattern, result_clean):
+                result_without_prefix = re.sub(prefix_pattern, '', result_clean).strip()
+                break
+        
+        # Extract main title (before separators like ":", "/", "-")
+        # This handles cases like "Wise Guy: David Chase and the Sopranos"
+        main_title_match = re.match(r'^([^:\-/\|]+)', result_without_prefix)
+        if main_title_match:
+            main_title = main_title_match.group(1).strip()
+            
+            if main_title.startswith(expected_clean):
+                return True
+            
+            # Check if expected title words appear at the start of main title
+            expected_words = expected_clean.split()
+            main_title_words = main_title.split()
+            if len(main_title_words) >= len(expected_words):
+                if main_title_words[:len(expected_words)] == expected_words:
+                    return True
+        
+        # Also check if expected title is at the very start (after prefixes)
+        if result_without_prefix.startswith(expected_clean):
             return True
-        if calculate_similarity(expected, result_name) > 0.4:
+        
+        # Stricter similarity threshold for fuzzy matching
+        if calculate_similarity(expected, result_name) > 0.7:
             return True
 
     return False
@@ -247,10 +318,11 @@ def format_torrent_search_results(
     back_callback_key: str | None = None,
     back_button_text: str | None = None,
     media_details: MediaDetails | None = None,
+    season_number: int | None = None,
 ) -> InlineKeyboardMarkup:
     """Format torrent search results into Telegram inline keyboard."""
     buttons = [
-        _create_result_button(result, results_cache_key, media_details)
+        _create_result_button(result, results_cache_key, media_details, season_number)
         for result in results
     ]
 
@@ -269,6 +341,7 @@ def _create_result_button(
     result: MovieSearchResult,
     results_cache_key: str,
     media_details: MediaDetails | None,
+    season_number: int | None = None,
 ) -> list[InlineKeyboardButton]:
     """Create a single result button with metadata."""
     quality = result.video_quality or "N/A"
@@ -276,7 +349,12 @@ def _create_result_button(
     seeds = result.seeds if result.seeds is not None else "?"
     peers = result.peers if result.peers is not None else "?"
     
-    label = f"{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
+    # Get rating emoji for quality
+    rating_emoji = ""
+    if hasattr(result.video_quality, 'rating_emoji'):
+        rating_emoji = result.video_quality.rating_emoji + " "
+    
+    label = f"{rating_emoji}{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
     
     payload = {
         "action": MOVIE_DETAILED_CALLBACK,
@@ -290,6 +368,8 @@ def _create_result_button(
             "year": media_details.year,
             "quality": result.video_quality,
         }
+        if season_number is not None and media_details.is_series:
+            payload["tmdb_info"]["season"] = season_number
     
     if result.has_full_details:
         payload["movie_details"] = result.model_dump(
