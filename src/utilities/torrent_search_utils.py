@@ -14,7 +14,7 @@ from aiogram.types import (
 )
 
 from bot.constants import MOVIE_DETAILED_CALLBACK
-from models.movie_detail_service_types import MovieSearchResult
+from models.movie_detail_service_types import MovieSearchResult, VideoQuality
 from models.search_provider_types import MediaDetails
 from torrents import get_torrent_provider
 from utilities.media_utils import (
@@ -350,9 +350,7 @@ def _create_result_button(
     peers = result.peers if result.peers is not None else "?"
     
     # Get rating emoji for quality
-    rating_emoji = ""
-    if hasattr(result.video_quality, 'rating_emoji'):
-        rating_emoji = result.video_quality.rating_emoji + " "
+    rating_emoji = _get_quality_rating_emoji(result.video_quality)
     
     label = f"{rating_emoji}{quality} | {size} | ⬆️{seeds} ⬇️{peers}"
     
@@ -378,3 +376,23 @@ def _create_result_button(
     
     callback_data = redis_callback_save(payload)
     return [InlineKeyboardButton(text=label, callback_data=callback_data)]
+
+
+def _get_quality_rating_emoji(quality: VideoQuality | str | None) -> str:
+    """Get rating emoji for quality, handling both VideoQuality enum and string."""
+    if quality is None:
+        return ""
+    
+    # If already VideoQuality enum, use rating_emoji directly
+    if isinstance(quality, VideoQuality):
+        return quality.rating_emoji + " "
+    
+    # If string, try to convert to VideoQuality
+    if isinstance(quality, str):
+        try:
+            video_quality = VideoQuality(quality)
+            return video_quality.rating_emoji + " "
+        except ValueError:
+            pass
+    
+    return ""
