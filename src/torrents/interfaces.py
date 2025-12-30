@@ -14,7 +14,15 @@ class DownloadResult:
 
 
 class TorrentProviderProtocol(Protocol):
+    """Protocol for torrent provider implementations.
+    
+    All torrent providers must implement this interface to ensure
+    compatibility with the bot's torrent search and download system.
+    """
     name: str
+    base_url: str
+    max_query_length: int | None
+    requires_authentication: bool
 
     @abstractmethod
     async def search(
@@ -30,3 +38,14 @@ class TorrentProviderProtocol(Protocol):
 
     @abstractmethod
     async def download_movie(self, movie_id: int | str) -> DownloadResult: ...
+
+    def get_torrent_url(self, movie_id: int | str) -> str:
+        """Get the full URL to the torrent page on the tracker.
+        
+        Args:
+            movie_id: The torrent ID on the tracker
+            
+        Returns:
+            Full URL to the torrent page
+        """
+        ...

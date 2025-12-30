@@ -15,7 +15,7 @@ from bot.constants import (
 from models.movie_detail_service_types import MovieDetails, MovieSearchResult
 from torrents import get_torrent_provider
 from services.qbt_services import qbt_get_categories, get_client
-from utilities import kinozal_utils, handlers_utils
+from utilities import handlers_utils
 from utilities.handlers_utils import check_action
 from utilities.media_utils import parse_video_quality
 from pydantic import ValidationError
@@ -79,9 +79,9 @@ async def send_movie_details(
     message_caption = format_movie_details_message(movie_details)
     logger.debug(f"Sending movie details: {message_caption}")
 
-    # Fallback: if tmdb_info is missing, create from Kinozal movie details
+    # Fallback: if tmdb_info is missing, create from torrent provider movie details
     if not tmdb_info:
-        logger.info("No tmdb_info provided, using Kinozal movie details as fallback")
+        logger.info("No tmdb_info provided, using torrent provider movie details as fallback")
         tmdb_info = _create_fallback_tmdb_info(movie_details)
         logger.info("Fallback tmdb_info: %s", tmdb_info)
 
@@ -130,16 +130,19 @@ def create_reply_markup(
         }),
     )
     
-    kinozal_button = InlineKeyboardButton(
-        text="Открыть в Кинозале",
-        url=kinozal_utils.get_url(f"/details.php?id={movie_id}"),
+    # Get provider to generate tracker URL dynamically
+    provider = get_torrent_provider()
+    tracker_url = provider.get_torrent_url(movie_id)
+    tracker_button = InlineKeyboardButton(
+        text=f"Открыть в {provider.name.capitalize()}",
+        url=tracker_url,
     )
 
     return InlineKeyboardMarkup(
         inline_keyboard=[
             download_buttons,
             [back_button],
-            [kinozal_button],
+            [tracker_button],
         ]
     )
 
@@ -169,9 +172,9 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
 
 
 def _create_fallback_tmdb_info(movie_details: MovieDetails) -> dict:
-    """Create tmdb_info from Kinozal movie details as fallback.
+    """Create tmdb_info from torrent provider movie details as fallback.
     
-    Kinozal names are usually in format:
+    Torrent provider names are usually in format:
     - "Русское название / English Title (сезон...) / 2024 / ..."
     - "Русское название / English Title / 2024 / ..."
     """

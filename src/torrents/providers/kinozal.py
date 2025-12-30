@@ -367,9 +367,20 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
 
 class KinozalTorrentProvider(TorrentProviderProtocol):
     name = "kinozal"
+    max_query_length = 64
+    requires_authentication = True
 
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
+
+    @property
+    def base_url(self) -> str:
+        """Return the base URL of the Kinozal tracker."""
+        return kinozal_utils.get_url()
+
+    def get_torrent_url(self, movie_id: int | str) -> str:
+        """Get the full URL to the torrent page on Kinozal."""
+        return f"{self.base_url}/details.php?id={movie_id}"
 
     async def search(
         self,

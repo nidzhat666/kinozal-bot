@@ -24,6 +24,7 @@ from utilities.media_search_utils import (
     show_season_choices,
 )
 from utilities.torrent_search_utils import perform_torrent_search
+from torrents import get_torrent_provider
 from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
@@ -142,7 +143,10 @@ async def handle_media_selection(callback_query: CallbackQuery):
         return
 
     # Handle movie search or series without seasons
-    search_query = media_utils.build_torrent_query_from_media_details(movie_details)
+    provider = get_torrent_provider()
+    search_query = media_utils.build_torrent_query_from_media_details(
+        movie_details, max_length=provider.max_query_length
+    )
     search_context = (
         (redis_data.get("query") or "").strip()
         or (redis_data.get("requested_item") or "").strip()
@@ -191,10 +195,12 @@ async def handle_season_selection(callback_query: CallbackQuery):
         None,
     )
 
+    provider = get_torrent_provider()
     search_query = media_utils.build_torrent_query_from_media_details(
         movie_details,
         season_number=season_number if len(movie_details.seasons) > 1 else None,
         season_year=season_year,
+        max_length=provider.max_query_length,
     )
 
     requested_item = redis_data.get("requested_item", movie_details.title)

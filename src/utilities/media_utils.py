@@ -16,6 +16,7 @@ def build_torrent_query_from_media_details(
     media_details: MediaDetails,
     season_number: int | None = None,
     season_year: int | None = None,
+    max_length: int | None = 64,
 ) -> str:
     # Prepare titles
     titles = set()
@@ -58,40 +59,44 @@ def build_torrent_query_from_media_details(
     if not media_details.is_series and media_details.year:
         year_part = f"({media_details.year})"
 
+    # If no max_length limit, return the full query without truncation
+    if max_length is None:
+        return _construct_query(combined_titles_part, season_part, year_part)
+
     # Strategy 1: Everything (Combined Titles + Season + Year)
     query = _construct_query(combined_titles_part, season_part, year_part)
-    if len(query) <= MAX_QUERY_LENGTH:
+    if len(query) <= max_length:
         return query
 
     # Strategy 2: Combined Titles + Season (Drop Year)
     if year_part:
         query = _construct_query(combined_titles_part, season_part, None)
-        if len(query) <= MAX_QUERY_LENGTH:
+        if len(query) <= max_length:
             return query
 
     # Strategy 3: Single Title (Russian preferred) + Season + Year
     # If combined was too long, try just Russian
     if ru_title:
         query = _construct_query(ru_title, season_part, year_part)
-        if len(query) <= MAX_QUERY_LENGTH:
+        if len(query) <= max_length:
             return query
 
     # Strategy 4: Single Title (Russian preferred) + Season (Drop Year)
     if ru_title and year_part:
         query = _construct_query(ru_title, season_part, None)
-        if len(query) <= MAX_QUERY_LENGTH:
+        if len(query) <= max_length:
             return query
 
     # Strategy 5: Single Title (English preferred if we haven't tried or if RU failed) + Season + Year
     if en_title and en_title != ru_title:
         query = _construct_query(en_title, season_part, year_part)
-        if len(query) <= MAX_QUERY_LENGTH:
+        if len(query) <= max_length:
             return query
 
     # Strategy 6: Single Title (English) + Season (Drop Year)
     if en_title and en_title != ru_title and year_part:
         query = _construct_query(en_title, season_part, None)
-        if len(query) <= MAX_QUERY_LENGTH:
+        if len(query) <= max_length:
             return query
 
     # Strategy 7: Truncate Title (Last resort)
@@ -99,7 +104,7 @@ def build_torrent_query_from_media_details(
     target_title = ru_title or en_title or sorted_titles[0]
     # Estimate available space
     # query = title + " + " + season_part
-    # space = 64 - len(season_part) - 3
+    # space = max_length - len(season_part) - 3
 
     extras_len = 0
     extras_parts = []
@@ -111,11 +116,11 @@ def build_torrent_query_from_media_details(
     if extras_str:
         extras_len = len(extras_str) + 3  # " + "
 
-    available_for_title = MAX_QUERY_LENGTH - extras_len
+    available_for_title = max_length - extras_len
     if (
         available_for_title < 10
     ):  # If almost no space, just return what we can, it will likely fail but better than error
-        return _construct_query(target_title, season_part, None)[:MAX_QUERY_LENGTH]
+        return _construct_query(target_title, season_part, None)[:max_length]
 
     truncated_title = target_title[:available_for_title].strip()
     return _construct_query(truncated_title, season_part, None)
