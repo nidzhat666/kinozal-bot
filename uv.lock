@@ -410,17 +410,6 @@ wheels = [
 ]
 
 [[package]]
-name = "html-to-markdown"
-version = "2.19.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cc/d7/d7b7b6ba9b12ba6f25ef3219cd6a4fc22328985620eb825452b3d5e694a4/html_to_markdown-2.19.1.tar.gz", hash = "sha256:fa7a18177c4a4d11b5d6eb0f70e2c033ddb31fd5a71ad89c3f355a3cc196edf7", size = 200190, upload-time = "2025-12-29T13:19:06.903Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9f/4f/845aa671b9837c79b8798886addb7c57546624ac99cb01cf73ee903e0edb/html_to_markdown-2.19.1-cp310-abi3-macosx_11_0_arm64.whl", hash = "sha256:7284a5b87beae547549a438760e7ea59fc9ba4782b4ba5b2b7f01b512cca8384", size = 7569774, upload-time = "2025-12-29T13:19:00.975Z" },
-    { url = "https://files.pythonhosted.org/packages/f8/a8/3bcec3d32d6f10f1a933b7037252e8fa608b5a10af594be34db41a7e751a/html_to_markdown-2.19.1-cp310-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c9db035c2de1e366bfa320e2d98c491bc7b015e50d7acd9edfc04f45de5baca2", size = 8331348, upload-time = "2025-12-29T13:19:02.539Z" },
-    { url = "https://files.pythonhosted.org/packages/a5/4c/461b2161d6ca24e0616047b298172b37c86a3a7a87163c447b08f9b659d9/html_to_markdown-2.19.1-cp310-abi3-win_amd64.whl", hash = "sha256:fbff9955a4a04c9f0f9c1572b299d37ebf39f2a18d028ad4407c8ba9e8b0e5ab", size = 8422942, upload-time = "2025-12-29T13:19:04.456Z" },
-]
-
-[[package]]
 name = "httpcore"
 version = "1.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -531,7 +520,6 @@ dependencies = [
     { name = "coloredlogs" },
     { name = "fastapi" },
     { name = "groq" },
-    { name = "html-to-markdown" },
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pydantic" },
@@ -553,7 +541,6 @@ requires-dist = [
     { name = "coloredlogs", specifier = ">=15.0.1" },
     { name = "fastapi", specifier = ">=0.128.0" },
     { name = "groq", specifier = ">=0.34.1" },
-    { name = "html-to-markdown", specifier = ">=2.7.2" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jinja2", specifier = ">=3.1.6" },
     { name = "pydantic", specifier = ">=2.11.10" },
