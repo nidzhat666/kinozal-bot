@@ -33,53 +33,109 @@ class VideoQuality(StrEnum):
     WEBRIP = "WEBRip"
 
     @property
-    def keywords(self) -> list[str]:
+    def match_rules(self) -> list[tuple[list[str], list[str]]]:
+        """Returns list of (required_all, required_any) tuples.
+        
+        A rule matches if ALL keywords from required_all are present
+        AND AT LEAST ONE keyword from required_any is present.
+        If required_any is empty, only required_all is checked.
+        """
         match self:
-            # 4K variants - check more specific first
+            # 4K variants
             case VideoQuality.UHD_4K_REMUX:
-                return ["2160p remux", "4k remux", "uhd remux"]
+                return [
+                    (["remux"], ["2160p", "4k", "uhd"]),
+                ]
             case VideoQuality.UHD_4K_HDR_DV:
-                return ["dolby vision", "dovi", "dv hdr"]
+                return [
+                    (["dolby vision"], []),
+                    (["dovi"], []),
+                    (["dv"], ["hdr"]),
+                ]
             case VideoQuality.UHD_4K_HDR:
-                return ["2160p hdr", "4k hdr", "uhd hdr", "hdr10+", "hdr10"]
+                return [
+                    (["hdr"], ["2160p", "4k", "uhd"]),
+                    (["hdr10"], []),
+                    (["hdr10+"], []),
+                ]
             case VideoQuality.UHD_4K:
-                return ["2160p", "4k", "uhd"]
+                return [
+                    (["2160p"], []),
+                    (["4k"], []),
+                    (["uhd"], []),
+                ]
             
             # 1080p variants
             case VideoQuality.FHD_1080P_REMUX:
-                return ["1080p remux", "remux 1080"]
+                return [
+                    (["remux", "1080"], []),
+                    (["remux"], ["1080p", "fhd"]),
+                ]
             case VideoQuality.FHD_1080P_BLURAY:
-                return ["1080p bluray", "1080p blu-ray"]
+                return [
+                    (["1080p"], ["bluray", "blu-ray"]),
+                ]
             case VideoQuality.FHD_1080P_WEB:
-                return ["1080p web-dl", "1080p webdl", "1080p web"]
+                return [
+                    (["1080p"], ["web-dl", "webdl"]),
+                ]
             case VideoQuality.FHD_1080P:
-                return ["1080p", "fhd"]
+                return [
+                    (["1080p"], []),
+                    (["fhd"], []),
+                ]
             case VideoQuality.HD_1080I:
-                return ["1080i"]
+                return [
+                    (["1080i"], []),
+                ]
             
             # 720p variants
             case VideoQuality.HD_720P_BLURAY:
-                return ["720p bluray", "720p blu-ray"]
+                return [
+                    (["720p"], ["bluray", "blu-ray"]),
+                ]
             case VideoQuality.HD_720P_WEB:
-                return ["720p web-dl", "720p webdl", "720p web"]
+                return [
+                    (["720p"], ["web-dl", "webdl"]),
+                ]
             case VideoQuality.HD_720P:
-                return ["720p"]
+                return [
+                    (["720p"], []),
+                ]
             
             # SD variants
             case VideoQuality.SD_576P:
-                return ["576p", "576i"]
+                return [
+                    (["576p"], []),
+                    (["576i"], []),
+                ]
             case VideoQuality.SD_480P:
-                return ["480p", "480i"]
+                return [
+                    (["480p"], []),
+                    (["480i"], []),
+                ]
             
             # Source-based fallbacks
             case VideoQuality.BDRIP:
-                return ["bdrip", "bd-rip"]
+                return [
+                    (["bdrip"], []),
+                    (["bd-rip"], []),
+                ]
             case VideoQuality.HDRIP:
-                return ["hdrip", "hd-rip"]
+                return [
+                    (["hdrip"], []),
+                    (["hd-rip"], []),
+                ]
             case VideoQuality.DVDRIP:
-                return ["dvdrip", "dvd-rip"]
+                return [
+                    (["dvdrip"], []),
+                    (["dvd-rip"], []),
+                ]
             case VideoQuality.WEBRIP:
-                return ["webrip", "web-rip"]
+                return [
+                    (["webrip"], []),
+                    (["web-rip"], []),
+                ]
         return []
 
 

@@ -142,6 +142,7 @@ def parse_video_quality(name: str) -> str | None:
     
     Checks more specific qualities first (REMUX, HDR variants),
     then generic resolutions, then source-based fallbacks.
+    Uses match_rules that check for combinations of keywords.
     """
     name_lower = name.lower()
     
@@ -173,11 +174,34 @@ def parse_video_quality(name: str) -> str | None:
     ]
     
     for quality in priority_order:
-        if any(k in name_lower for k in quality.keywords):
+        if _matches_quality_rules(name_lower, quality.match_rules):
             return quality
     
     logger.warning("Unknown video quality in torrent name: %s", name)
     return None
+
+
+def _matches_quality_rules(name: str, rules: list[tuple[list[str], list[str]]]) -> bool:
+    """Check if name matches any of the quality rules.
+    
+    Each rule is (required_all, required_any):
+    - All keywords in required_all must be present
+    - At least one keyword from required_any must be present (if not empty)
+    """
+    for required_all, required_any in rules:
+        # Check all required keywords are present
+        if not all(kw in name for kw in required_all):
+            continue
+        
+        # If required_any is empty, rule matches
+        if not required_any:
+            return True
+        
+        # Check at least one of required_any is present
+        if any(kw in name for kw in required_any):
+            return True
+    
+    return False
 
 
 def calculate_similarity(s1: str, s2: str) -> float:
