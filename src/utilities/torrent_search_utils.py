@@ -206,7 +206,7 @@ def _filter_and_process_results(
             "ACCEPTED: [%s] seeds=%s %s",
             result.video_quality or "N/A",
             result.seeds,
-            result_name[:80],
+            result_name,
         )
 
     _log_quality_stats(quality_counter, len(raw_results), len(results))

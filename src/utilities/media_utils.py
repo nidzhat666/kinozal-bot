@@ -219,9 +219,10 @@ def calculate_similarity(s1: str, s2: str) -> float:
 def extract_season_number(title: str) -> int | None:
     title_lower = title.lower()
 
-    # Patterns: "season X", "сезон X", "X сезон", "sX"
+    # Patterns: "season X", "сезон X", "сезон: X", "X сезон", "sX"
+    # Rutracker often uses "Сезон: 2" format with colon
     patterns = [
-        r"(?:season|сезон)\s*(\d+)",
+        r"(?:season|сезон)\s*:?\s*(\d+)",  # "season 2", "сезон 2", "сезон: 2"
         r"(\d+)\s*сезон",
         r"\bs(\d+)",
     ]
