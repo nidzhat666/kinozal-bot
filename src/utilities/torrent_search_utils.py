@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import Counter
 from itertools import groupby
 
 from aiogram.types import (
@@ -150,6 +151,7 @@ def _filter_and_process_results(
 ) -> list[MovieSearchResult]:
     seen_movie_ids = set()
     results = []
+    quality_counter: Counter[str] = Counter()
 
     expected_titles = []
     if media_details:
@@ -178,8 +180,32 @@ def _filter_and_process_results(
 
         seen_movie_ids.add(result.id)
         results.append(result)
+        quality_counter[result.video_quality or "Unknown"] += 1
 
+    _log_quality_stats(quality_counter, len(raw_results), len(results))
     return results
+
+
+def _log_quality_stats(
+    quality_counter: Counter[str],
+    total_raw: int,
+    total_filtered: int,
+) -> None:
+    """Log statistics about found video qualities."""
+    if not quality_counter:
+        logger.info("No torrents found after filtering (raw: %d)", total_raw)
+        return
+
+    # Sort by count descending
+    sorted_stats = quality_counter.most_common()
+    stats_str = ", ".join(f"{quality}: {count}" for quality, count in sorted_stats)
+    
+    logger.info(
+        "Quality stats (filtered %d/%d): %s",
+        total_filtered,
+        total_raw,
+        stats_str,
+    )
 
 
 def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:

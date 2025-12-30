@@ -152,13 +152,16 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.UHD_4K_REMUX,
         VideoQuality.UHD_4K_HDR_DV,
         VideoQuality.UHD_4K_HDR,
+        VideoQuality.UHD_4K_BDRIP,
         # 1080p specific variants
         VideoQuality.FHD_1080P_REMUX,
         VideoQuality.FHD_1080P_BLURAY,
         VideoQuality.FHD_1080P_WEB,
+        VideoQuality.FHD_1080P_BDRIP,
         # 720p specific variants
         VideoQuality.HD_720P_BLURAY,
         VideoQuality.HD_720P_WEB,
+        VideoQuality.HD_720P_BDRIP,
         # Generic resolutions
         VideoQuality.UHD_4K,
         VideoQuality.FHD_1080P,

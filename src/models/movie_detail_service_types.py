@@ -8,18 +8,21 @@ class VideoQuality(StrEnum):
     UHD_4K_REMUX = "4K REMUX"
     UHD_4K_HDR_DV = "4K HDR DV"
     UHD_4K_HDR = "4K HDR"
+    UHD_4K_BDRIP = "4K BDRip"
     UHD_4K = "4K"
     
     # 1080p variants
     FHD_1080P_REMUX = "1080p REMUX"
     FHD_1080P_BLURAY = "1080p BluRay"
     FHD_1080P_WEB = "1080p WEB-DL"
+    FHD_1080P_BDRIP = "1080p BDRip"
     FHD_1080P = "1080p"
     HD_1080I = "1080i"
     
     # 720p variants
     HD_720P_BLURAY = "720p BluRay"
     HD_720P_WEB = "720p WEB-DL"
+    HD_720P_BDRIP = "720p BDRip"
     HD_720P = "720p"
     
     # SD variants
@@ -58,6 +61,11 @@ class VideoQuality(StrEnum):
                     (["hdr10"], []),
                     (["hdr10+"], []),
                 ]
+            case VideoQuality.UHD_4K_BDRIP:
+                return [
+                    (["bdrip"], ["2160p", "4k", "uhd"]),
+                    (["bd-rip"], ["2160p", "4k", "uhd"]),
+                ]
             case VideoQuality.UHD_4K:
                 return [
                     (["2160p"], []),
@@ -79,6 +87,10 @@ class VideoQuality(StrEnum):
                 return [
                     (["1080p"], ["web-dl", "webdl"]),
                 ]
+            case VideoQuality.FHD_1080P_BDRIP:
+                return [
+                    (["1080p"], ["bdrip", "bd-rip"]),
+                ]
             case VideoQuality.FHD_1080P:
                 return [
                     (["1080p"], []),
@@ -97,6 +109,10 @@ class VideoQuality(StrEnum):
             case VideoQuality.HD_720P_WEB:
                 return [
                     (["720p"], ["web-dl", "webdl"]),
+                ]
+            case VideoQuality.HD_720P_BDRIP:
+                return [
+                    (["720p"], ["bdrip", "bd-rip"]),
                 ]
             case VideoQuality.HD_720P:
                 return [
