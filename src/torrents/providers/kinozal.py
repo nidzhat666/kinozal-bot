@@ -186,6 +186,7 @@ def _build_stub_movie_details(item: _RawSearchItem) -> MovieDetails:
         audio_language=[],
         ratings=MovieRatings(),
         torrent_details=[],
+        torrent_html_content=None,
     )
 
 

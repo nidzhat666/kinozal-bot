@@ -244,6 +244,7 @@ class MovieDetails(BaseModel):
     audio_language: list[AudioLanguage] | None = []
     ratings: MovieRatings
     torrent_details: list[TorrentDetails]
+    torrent_html_content: str | None = None
 
 
 class MovieSearchResult(MovieDetails):

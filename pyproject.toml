@@ -9,6 +9,7 @@ dependencies = [
     "aiogram>=3.22.0",
     "aioqbt>=1.0.0",
     "beautifulsoup4>=4.14.2",
+    "bleach>=6.3.0",
     "coloredlogs>=15.0.1",
     "fastapi>=0.128.0",
     "groq>=0.34.1",
@@ -21,5 +22,6 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pyupgrade>=3.21.0",
     "redis>=7.0.1",
+    "sulguk>=0.11.0",
     "uvicorn[standard]>=0.40.0",
 ]

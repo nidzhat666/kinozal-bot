@@ -6,6 +6,7 @@ from typing import AsyncGenerator
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand, Update
 from fastapi import FastAPI, Request
+from sulguk import AiogramSulgukMiddleware
 
 from bot.config import (
     TELEGRAM_BOT_TOKEN,
@@ -32,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 # Initialize Bot and Dispatcher
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
+bot.session.middleware(AiogramSulgukMiddleware())
+
 dp = Dispatcher()
 
 # Register routers

@@ -5,6 +5,7 @@ from aiogram import Router
 from aiogram.enums.parse_mode import ParseMode
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.text_decorations import html_decoration
+from sulguk import SULGUK_PARSE_MODE
 
 from bot.config import QBT_CREDENTIALS
 from bot.constants import (
@@ -96,7 +97,7 @@ async def send_movie_details(
         tmdb_info=tmdb_info,
     )
     await callback_query.message.edit_text(
-        message_caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup
+        message_caption, parse_mode=SULGUK_PARSE_MODE, reply_markup=reply_markup
     )
 
 
@@ -161,12 +162,17 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         f"{bold('Рейтинги')}:\n"
         f"- IMDB: {code(movie_details.ratings.imdb)}\n"
         f"- Kinopoisk: {code(movie_details.ratings.kinopoisk)}\n\n"
-        f"<b>Torrent Details</b>:\n"
     )
     
-    for detail in movie_details.torrent_details:
-        value = detail.value or "-"
-        message += f"- {bold(detail.key)} {code(value)}\n"
+    # If torrent_html_content is available, use it instead of parsed details
+    if movie_details.torrent_html_content:
+        message = f"<b>Torrent Details</b>:\n{movie_details.torrent_html_content}"
+    else:
+        # Fallback to parsed torrent_details
+        message += f"<b>Torrent Details</b>:\n"
+        for detail in movie_details.torrent_details:
+            value = detail.value or "-"
+            message += f"- {bold(detail.key)} {code(value)}\n"
 
     return message
 

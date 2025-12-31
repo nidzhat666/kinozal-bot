@@ -3,8 +3,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import bleach
 import httpx
 from bs4 import BeautifulSoup
+from sulguk import transform_html
 
 from bot.config import RUTRACKER_URL
 from services.exceptions import RutrackerApiError
@@ -123,6 +125,201 @@ async def _get_search_text(
         raise RutrackerApiError(error_message) from exc
 
 
+async def _fetch_torrent_page(
+    movie_id: int | str, credentials: dict[str, str] | None = None
+) -> str:
+    """Get HTML content from Rutracker torrent page."""
+    cookies = {}
+    if credentials:
+        try:
+            auth_cookies = await _authenticate(credentials)
+            cookies.update(auth_cookies)
+        except Exception as e:
+            logger.warning(
+                "Failed to authenticate with Rutracker, trying guest access: %s", e
+            )
+
+    url = get_url(f"/forum/viewtopic.php?t={movie_id}")
+
+    try:
+        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            # Rutracker typically uses cp1251 encoding
+            return response.text
+    except httpx.HTTPError as exc:
+        error_message = f"HTTP error while requesting {url}: {exc}"
+        logger.error(error_message)
+        raise RutrackerApiError(error_message) from exc
+
+
+def _remove_links_with_parents(soup: BeautifulSoup) -> None:
+    """Remove all links (<a> tags) with their parent blocks until only text remains.
+    
+    Iterates through all links, removes them, and then recursively removes
+    their parent containers if they become effectively empty (contain only 
+    whitespace or common separators).
+    """
+    # Create a list copy to safely iterate while modifying the tree
+    for link in list(soup.find_all("a")):
+        # Skip if link is already removed
+        if link.parent is None:
+            continue
+            
+        parent = link.parent
+        link.decompose()
+        
+        # Walk up the tree removing empty parents
+        current = parent
+        while current and current != soup:
+            # Check for other significant tags
+            # We treat <br> as non-significant for container removal decision 
+            # if the text is also empty/separators
+            has_significant_tags = False
+            for child in current.find_all(recursive=False):
+                if child.name != "br":
+                    has_significant_tags = True
+                    break
+            
+            if has_significant_tags:
+                break
+                
+            # Check text content
+            text = current.get_text(strip=True)
+            # Allow removal if text is empty or consists only of separators
+            # Separators: | / \ - . , : ; and whitespace
+            if not text or all(c in "|/\\-.,:; \t\n\r" for c in text):
+                # Element is effectively empty -> remove it and check parent
+                parent_to_remove = current
+                current = current.parent
+                parent_to_remove.decompose()
+            else:
+                # Contains significant text
+                break
+
+
+def _deduplicate_hr(soup: BeautifulSoup) -> None:
+    """Remove duplicate <hr> tags (consecutive horizontal lines).
+    
+    Removes an <hr> tag if:
+    1. It follows immediately after another <hr> (ignoring whitespace).
+    2. It is the first significant element in the container.
+    3. It is the last significant element in the container.
+    """
+    hrs = soup.find_all("hr")
+    if not hrs:
+        return
+
+    def is_empty_text(node):
+        """Check if node is a text node containing only whitespace."""
+        return isinstance(node, str) and not node.strip()
+
+    for hr in hrs:
+        # Check previous sibling
+        prev_node = hr.previous_sibling
+        while prev_node and is_empty_text(prev_node):
+            prev_node = prev_node.previous_sibling
+        
+        # 1. Remove if previous significant node is also hr
+        if prev_node and prev_node.name == "hr":
+            hr.decompose()
+            continue
+            
+        # 2. Remove if it's the first significant element (prev_node is None)
+        if prev_node is None:
+            hr.decompose()
+            continue
+            
+        # Check next sibling
+        next_node = hr.next_sibling
+        while next_node and is_empty_text(next_node):
+            next_node = next_node.next_sibling
+            
+        # 3. Remove if it's the last significant element (next_node is None)
+        if next_node is None:
+            hr.decompose()
+
+
+def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
+    """Extract HTML content from the first post_body element."""
+    post_body = soup.find("div", class_="post_body")
+    if not post_body:
+        # Try alternative class name without quotes
+        post_body = soup.find("div", {"class": "post_body"})
+    
+    if not post_body:
+        logger.warning("post_body element not found on page")
+        return None
+    
+    # Remove all elements with class="sp-wrap"
+    for sp_wrap in post_body.find_all(class_="sp-wrap"):
+        sp_wrap.decompose()
+    
+    # Remove all links with their parent blocks
+    _remove_links_with_parents(post_body)
+
+    # Get the inner HTML as string
+    return str(post_body)
+
+
+def _clean_and_convert_html(html: str) -> str:
+    """Clean HTML with bleach and convert to Telegram format with sulguk.
+    
+    First cleans the HTML with bleach to remove dangerous tags/attributes,
+    then converts it to Telegram-compatible format using sulguk.
+    """
+    # Define allowed tags for Telegram HTML
+    # Based on Telegram's supported tags
+    allowed_tags = [
+        "a", "b", "strong", "i", "em", "s", "strike", "del", "u", "ins",
+        "span", "tg-spoiler", "pre", "code", "details", "summary",
+        "br", "hr", "wbr", "ul", "ol", "li", "div", "p", "q", "blockquote",
+        "h1", "h2", "h3", "h4", "h5", "h6", "noscript", "cite", "var",
+        "progress", "meter", "kbd", "samp", "img", "tt", "input",
+        "footer", "header", "main", "nav", "section", "html", "body",
+        "output", "data", "time"
+    ]
+    
+    # Define allowed attributes
+    allowed_attributes = {
+        "a": ["href"],
+        "span": ["class"],
+        "pre": ["class"],
+        "code": ["class"],
+        "ol": ["reversed", "type", "start"],
+        "li": ["value"],
+        "img": ["alt", "src"],
+        "input": ["type", "value"],
+        "blockquote": ["expandable"],
+    }
+    
+    # Clean HTML with bleach
+    cleaned_html = bleach.clean(
+        html,
+        tags=allowed_tags,
+        attributes=allowed_attributes,
+        strip=False,  # Don't strip whitespace to preserve layout
+    )
+    
+    # Deduplicate <hr> tags and fix formatting after cleaning
+    try:
+        soup = BeautifulSoup(cleaned_html, "html.parser")
+        _deduplicate_hr(soup)
+        
+        # Convert span.post-b to <b> tags for bold text (Rutracker style)
+        for span in soup.find_all("span", class_="post-b"):
+            bold_tag = soup.new_tag("b")
+            # Move all contents from span to b
+            # We need to copy contents because replace_with might modify the tree during iteration
+            # But extend works fine here
+            bold_tag.extend(span.contents)
+            span.replace_with(bold_tag)
+            
+        return str(soup)
+    except Exception as e:
+        logger.warning("Failed to process HTML structure: %s", e)
+
+
 def _parse_search_results(html: str) -> list[_RawSearchItem]:
     """Parse Rutracker search results HTML."""
     soup = BeautifulSoup(html, "html.parser")
@@ -233,6 +430,7 @@ def _build_stub_movie_details(item: _RawSearchItem) -> MovieDetails:
         audio_language=[],
         ratings=MovieRatings(),
         torrent_details=[],
+        torrent_html_content=None,
     )
 
 
@@ -251,7 +449,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
 
     def get_torrent_url(self, movie_id: int | str) -> str:
         """Get the full URL to the torrent page on Rutracker."""
-        return f"{self.base_url}/viewtopic.php?t={movie_id}"
+        return f"{self.base_url}/forum/viewtopic.php?t={movie_id}"
 
     async def search(
         self,
@@ -271,12 +469,56 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         """Get detailed information about a torrent from Rutracker.
         
-        TODO: Implement HTML parsing for Rutracker torrent details page.
+        Extracts the first post_body element, cleans it with bleach,
+        and converts it to Telegram-compatible HTML with sulguk.
         """
-        raise NotImplementedError(
-            "Rutracker torrent detail parsing is not yet implemented. "
-            "HTML parsing needs to be added."
-        )
+        logger.debug("Fetching movie details for Rutracker id %s", movie_id)
+        
+        try:
+            # Fetch the torrent page HTML
+            html = await _fetch_torrent_page(movie_id, self._credentials)
+            
+            # Parse with BeautifulSoup
+            soup = BeautifulSoup(html, "html.parser")
+            
+            # Extract post_body HTML
+            post_body_html = _extract_post_body_html(soup)
+            
+            # Clean and convert HTML
+            cleaned_html = None
+            if post_body_html:
+                cleaned_html = _clean_and_convert_html(post_body_html)
+            
+            # Try to extract title from page
+            title = ""
+            title_tag = soup.find("h1")
+            if title_tag:
+                title_link = title_tag.find("a")
+                if title_link:
+                    title = title_link.get_text(strip=True)
+                else:
+                    title = title_tag.get_text(strip=True)
+            
+            # Create MovieDetails with HTML content
+            return MovieDetails(
+                name=title or f"Torrent {movie_id}",
+                year="",
+                genres=[],
+                director="",
+                actors=[],
+                season=None,
+                image_url=None,
+                video_quality=None,
+                audio_quality=None,
+                audio_language=[],
+                ratings=MovieRatings(),
+                torrent_details=[],
+                torrent_html_content=cleaned_html,
+            )
+        except Exception as exc:
+            error_message = f"Error fetching Rutracker movie detail for id {movie_id}: {exc}"
+            logger.error(error_message, exc_info=True)
+            raise RutrackerApiError(error_message) from exc
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
         """Download torrent file from Rutracker.
