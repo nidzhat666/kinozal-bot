@@ -64,12 +64,21 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
     
     if movie_details_data := callback_data.get("movie_details"):
         try:
-            logger.info("Using cached movie details for movie ID: %s", movie_id)
             result = MovieSearchResult.model_validate(movie_details_data)
             # Use provider_name from cached data if available
             if result.provider_name:
                 provider_name = result.provider_name
-            return result
+            
+            # Only use cached data if it has full details
+            # Otherwise, fetch full details from provider
+            if result.has_full_details:
+                logger.info("Using cached full movie details for movie ID: %s", movie_id)
+                return result
+            else:
+                logger.info(
+                    "Cached movie details for ID %s are incomplete (has_full_details=False), fetching full details",
+                    movie_id
+                )
         except ValidationError as exc:
             logger.warning(
                 "Failed to use cached movie details for ID %s: %s. Refetching.",
@@ -176,25 +185,25 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
     code = html_decoration.code
     
     message = (
-        f"{bold('Название')}: {movie_details.name}\n"
-        f"{bold('Год')}: {movie_details.year}\n"
-        f"{bold('Жанр')}: {', '.join(movie_details.genres)}\n"
-        f"{bold('Режисер')}: {movie_details.director}\n"
-        f"{bold('Актеры')}: {', '.join(movie_details.actors[:5])}\n\n"
-        f"{bold('Рейтинги')}:\n"
-        f"- IMDB: {code(movie_details.ratings.imdb)}\n"
-        f"- Kinopoisk: {code(movie_details.ratings.kinopoisk)}\n\n"
+        f"{bold('Название')}: {movie_details.name}<br/>"
+        f"{bold('Год')}: {movie_details.year}<br/>"
+        f"{bold('Жанр')}: {', '.join(movie_details.genres)}<br/>"
+        f"{bold('Режисер')}: {movie_details.director}<br/>"
+        f"{bold('Актеры')}: {', '.join(movie_details.actors[:5])}<br/><br/>"
+        f"{bold('Рейтинги')}:<br/>"
+        f"- IMDB: {code(movie_details.ratings.imdb)}<br/>"
+        f"- Kinopoisk: {code(movie_details.ratings.kinopoisk)}<br/><br/>"
     )
     
     # If torrent_html_content is available, use it instead of parsed details
     if movie_details.torrent_html_content:
-        message = f"<b>Torrent Details</b>:\n{movie_details.torrent_html_content}"
+        message = f"<b>Torrent Details</b>:<br/>{movie_details.torrent_html_content}"
     else:
         # Fallback to parsed torrent_details
-        message += f"<b>Torrent Details</b>:\n"
+        message += f"<b>Torrent Details</b>:<br/>"
         for detail in movie_details.torrent_details:
             value = detail.value or "-"
-            message += f"- {bold(detail.key)} {code(value)}\n"
+            message += f"- {bold(detail.key)} {code(value)}<br/>"
 
     return message
 

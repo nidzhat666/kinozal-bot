@@ -418,10 +418,11 @@ def _create_result_button(
         if season_number is not None and media_details.is_series:
             payload["tmdb_info"]["season"] = season_number
     
-    if result.has_full_details:
-        payload["movie_details"] = result.model_dump(
-            mode="json", by_alias=True, exclude_none=True
-        )
+    # Always include movie_details in callback_data to avoid refetching
+    # This allows the handler to use cached data when available
+    payload["movie_details"] = result.model_dump(
+        mode="json", by_alias=True, exclude_none=True
+    )
     
     callback_data = redis_callback_save(payload)
     return [InlineKeyboardButton(text=label, callback_data=callback_data)]
