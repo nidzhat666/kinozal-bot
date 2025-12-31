@@ -42,8 +42,10 @@ async def _search_movies(
     requested_type: str | None = None,
 ) -> list[MovieSearchResult]:
     started_at = perf_counter()
+    provider_name = "kinozal"
     logger.debug(
-        "Starting Kinozal search for query '%s' (requested_item=%s, requested_type=%s)",
+        "[%s] Starting search for query '%s' (requested_item=%s, requested_type=%s)",
+        provider_name,
         query,
         requested_item,
         requested_type,
@@ -51,8 +53,11 @@ async def _search_movies(
 
     raw_items = await _fetch_search_items(query)
     if not raw_items:
-        _log_search_duration(query, 0, started_at)
+        logger.info("[%s] No raw search results found for query '%s'", provider_name, query)
+        _log_search_duration(query, 0, started_at, provider_name)
         return []
+
+    logger.info("[%s] Found %d raw search results for query '%s'", provider_name, len(raw_items), query)
 
     movies: list[MovieSearchResult] = []
 
@@ -61,14 +66,16 @@ async def _search_movies(
             result = _build_movie_search_result(item)
         except Exception as exc:
             logger.error(
-                "Failed to enrich search result for id %s: %s",
+                "[%s] Failed to enrich search result for id %s: %s",
+                provider_name,
                 item.movie_id,
                 exc,
             )
             continue
         movies.append(result)
 
-    _log_search_duration(query, len(movies), started_at)
+    logger.info("[%s] Successfully processed %d results for query '%s'", provider_name, len(movies), query)
+    _log_search_duration(query, len(movies), started_at, provider_name)
     return movies
 
 
@@ -94,7 +101,7 @@ def _build_movie_search_result(
 
 
 async def _fetch_movie_details(movie_id: int | str) -> MovieDetails:
-    logger.debug("Fetching movie details for Kinozal id %s", movie_id)
+    logger.debug("[kinozal] Fetching movie details for id %s", movie_id)
     html = await _get_text("/details.php", params={"id": movie_id})
     return _parse_movie_details(html)
 
@@ -104,7 +111,7 @@ async def _get_text(path: str, *, params: dict[str, str | int] | None = None) ->
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, params=params) as response:
-                logger.debug("GET %s -> %s", response.url, response.status)
+                logger.debug("[kinozal] GET %s -> %s", response.url, response.status)
                 if response.status != 200:
                     raise KinozalApiError(
                         f"Kinozal request to {response.url} failed with status {response.status}."
@@ -112,7 +119,7 @@ async def _get_text(path: str, *, params: dict[str, str | int] | None = None) ->
                 return await response.text()
     except aiohttp.ClientError as exc:
         error_message = f"HTTP client error while requesting {url}: {exc}"
-        logger.error(error_message)
+        logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
 
 
@@ -150,7 +157,7 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
             )
         )
 
-    logger.debug("Parsed %d Kinozal search results", len(results))
+    logger.debug("[kinozal] Parsed %d search results", len(results))
     return results
 
 
@@ -169,7 +176,7 @@ def _parse_movie_details(html: str) -> MovieDetails:
         )
     except Exception as exc:  # noqa: BLE001
         error_message = f"Error parsing Kinozal movie detail results: {exc}"
-        logger.error(error_message)
+        logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
 
 
@@ -287,10 +294,12 @@ def _log_search_duration(
     query: str,
     result_count: int,
     started_at: float,
+    provider_name: str = "kinozal",
 ) -> None:
     duration = perf_counter() - started_at
     logger.info(
-        "Search completed for query '%s' with %d results in %.2fs",
+        "[%s] Search completed for query '%s' with %d results in %.2fs",
+        provider_name,
         query,
         result_count,
         duration,
@@ -301,14 +310,14 @@ async def _download_movie(
     movie_id: int | str,
     credentials: dict[str, str],
 ) -> DownloadResult:
-    logger.debug("Downloading Kinozal torrent for movie id %s", movie_id)
+    logger.debug("[kinozal] Downloading torrent for movie id %s", movie_id)
     cookies = await _authenticate(credentials)
     url = get_url(f"/download.php?id={movie_id}")
 
     try:
         async with aiohttp.ClientSession(cookies=cookies) as session:
             async with session.get(url) as response:
-                logger.debug("GET %s -> %s", response.url, response.status)
+                logger.debug("[kinozal] GET %s -> %s", response.url, response.status)
                 if response.status != 200:
                     raise KinozalApiError(
                         f"Failed to download movie {movie_id}: HTTP {response.status}."
@@ -318,7 +327,7 @@ async def _download_movie(
         error_message = (
             f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
         )
-        logger.error(error_message)
+        logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
 
     if b"pay.php" in payload:
@@ -328,7 +337,7 @@ async def _download_movie(
     async with aiofile.async_open(target, "wb") as file_handle:
         await file_handle.write(payload)
 
-    logger.info("Torrent file for movie %s saved to %s", movie_id, target)
+    logger.info("[kinozal] Torrent file for movie %s saved to %s", movie_id, target)
     return DownloadResult(file_path=str(target), filename=target.name)
 
 
@@ -356,7 +365,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
             cookies = session.cookie_jar.filter_cookies(kinozal_url)
     except aiohttp.ClientError as exc:
         error_message = f"HTTP client error during Kinozal authentication: {exc}"
-        logger.error(error_message)
+        logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
 
     uid_cookie = cookies.get("uid")

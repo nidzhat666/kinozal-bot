@@ -81,25 +81,53 @@ async def perform_torrent_search(
     target_message = callback_query.message if callback_query else message
 
     # Create tasks: for each query, search in all active providers
-    tasks = [
-        provider.search(
+    # Store provider and query info with each task to track results by provider
+    tasks_with_info = [
+        (provider, q, provider.search(
             q,
             requested_item=requested_item,
             requested_type=requested_type,
-        )
+        ))
         for q in queries
         for provider in active_providers
     ]
+    
+    tasks = [task for _, _, task in tasks_with_info]
 
     try:
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
         
         raw_results = []
-        for res in results_list:
+        provider_stats: dict[str, int] = {}
+        
+        for (provider, query, _), res in zip(tasks_with_info, results_list):
+            provider_name = provider.name
             if isinstance(res, Exception):
-                logger.warning(f"Search failed for one of the queries/providers: {res}")
+                logger.warning(
+                    "[%s] Search failed for query '%s': %s",
+                    provider_name,
+                    query,
+                    res
+                )
+                provider_stats[provider_name] = provider_stats.get(provider_name, 0)
             elif isinstance(res, list):
+                count = len(res)
+                provider_stats[provider_name] = provider_stats.get(provider_name, 0) + count
                 raw_results.extend(res)
+                logger.info(
+                    "[%s] Found %d torrents for query '%s'",
+                    provider_name,
+                    count,
+                    query
+                )
+        
+        # Log total stats per provider
+        for provider_name, total_count in provider_stats.items():
+            logger.info(
+                "[%s] Total results across all queries: %d torrents",
+                provider_name,
+                total_count
+            )
 
     except Exception as exc:
         logger.error(
@@ -186,12 +214,15 @@ def _filter_and_process_results(
         if not result.video_quality:
             result.video_quality = parse_video_quality(result_name)
 
+        provider_name = result.provider_name or "unknown"
+        
         if season_number is not None and not is_season_match(
             result_name, season_number
         ):
             skip_reasons["season_mismatch"] += 1
             logger.info(
-                "SKIP season_mismatch (S%02d): [%s] %s",
+                "[%s] SKIP season_mismatch (S%02d): [%s] %s",
+                provider_name,
                 season_number,
                 result.video_quality or "N/A",
                 result_name[:80],
@@ -201,7 +232,8 @@ def _filter_and_process_results(
         if expected_titles and not _is_fuzzy_match(result_name, expected_titles):
             skip_reasons["title_mismatch"] += 1
             logger.info(
-                "SKIP title_mismatch: [%s] %s",
+                "[%s] SKIP title_mismatch: [%s] %s",
+                provider_name,
                 result.video_quality or "N/A",
                 result_name[:80],
             )
@@ -211,7 +243,8 @@ def _filter_and_process_results(
         results.append(result)
         quality_counter[result.video_quality or "Unknown"] += 1
         logger.info(
-            "ACCEPTED: [%s] seeds=%s %s",
+            "[%s] ACCEPTED: [%s] seeds=%s %s",
+            provider_name,
             result.video_quality or "N/A",
             result.seeds,
             result_name,

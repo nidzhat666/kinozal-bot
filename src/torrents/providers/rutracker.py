@@ -32,7 +32,7 @@ async def _build_auth_cookies(credentials: dict[str, str] | None) -> dict[str, s
     try:
         return await _authenticate(credentials)
     except Exception as exc:
-        logger.warning("Failed to authenticate with Rutracker, using guest access: %s", exc)
+        logger.warning("[rutracker] Failed to authenticate, using guest access: %s", exc)
         return {}
 
 
@@ -65,12 +65,15 @@ async def _search_movies(
     query: str, *, credentials: dict[str, str] | None = None
 ) -> list[MovieSearchResult]:
     """Search for torrents on Rutracker."""
-    logger.debug("Starting Rutracker search for query '%s'", query)
+    provider_name = "rutracker"
+    logger.debug("[%s] Starting search for query '%s'", provider_name, query)
 
     raw_items = await _fetch_search_items(query, credentials)
     if not raw_items:
-        logger.info("No Rutracker search results found for query '%s'", query)
+        logger.info("[%s] No raw search results found for query '%s'", provider_name, query)
         return []
+
+    logger.info("[%s] Found %d raw search results for query '%s'", provider_name, len(raw_items), query)
 
     movies: list[MovieSearchResult] = []
 
@@ -79,14 +82,15 @@ async def _search_movies(
             result = _build_movie_search_result(item)
         except Exception as exc:
             logger.error(
-                "Failed to enrich search result for id %s: %s",
+                "[%s] Failed to enrich search result for id %s: %s",
+                provider_name,
                 item.movie_id,
                 exc,
             )
             continue
         movies.append(result)
 
-    logger.info("Rutracker search completed: %d results for query '%s'", len(movies), query)
+    logger.info("[%s] Successfully processed %d results for query '%s'", provider_name, len(movies), query)
     return movies
 
 
@@ -114,7 +118,7 @@ async def _get_search_text(
             return response.text
     except httpx.HTTPError as exc:
         error_message = f"HTTP error while requesting {url}: {exc}"
-        logger.error(error_message)
+        logger.error("[rutracker] %s", error_message)
         raise RutrackerApiError(error_message) from exc
 
 
@@ -133,7 +137,7 @@ async def _fetch_torrent_page(
             return response.text
     except httpx.HTTPError as exc:
         error_message = f"HTTP error while requesting {url}: {exc}"
-        logger.error(error_message)
+        logger.error("[rutracker] %s", error_message)
         raise RutrackerApiError(error_message) from exc
 
 
@@ -142,7 +146,7 @@ async def _download_movie(
     credentials: dict[str, str] | None = None,
 ) -> DownloadResult:
     """Download torrent file from Rutracker."""
-    logger.debug("Downloading Rutracker torrent for movie id %s", movie_id)
+    logger.debug("[rutracker] Downloading torrent for movie id %s", movie_id)
     cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/dl.php?t={movie_id}")
 
@@ -166,7 +170,7 @@ async def _download_movie(
         error_message = (
             f"HTTP error while downloading Rutracker movie {movie_id}: {exc}"
         )
-        logger.error(error_message)
+        logger.error("[rutracker] %s", error_message)
         raise RutrackerApiError(error_message) from exc
 
     # Validate that we got a torrent file
@@ -179,7 +183,7 @@ async def _download_movie(
     target = Path(tempfile.gettempdir()) / f"rutracker_{movie_id}.torrent"
     target.write_bytes(payload)
 
-    logger.info("Torrent file for movie %s saved to %s", movie_id, target)
+    logger.info("[rutracker] Torrent file for movie %s saved to %s", movie_id, target)
     return DownloadResult(file_path=str(target), filename=target.name)
 
 
@@ -274,7 +278,7 @@ def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
     """Extract HTML content from the first post_body element."""
     post_body = soup.find("div", class_="post_body")
     if not post_body:
-        logger.warning("post_body element not found on page")
+        logger.warning("[rutracker] post_body element not found on page")
         return None
     
     # Remove all elements with class="sp-wrap"
@@ -339,7 +343,7 @@ def _clean_and_convert_html(html: str) -> str:
             
         return str(soup)
     except Exception as exc:
-        logger.warning("Failed to process HTML structure: %s", exc)
+        logger.warning("[rutracker] Failed to process HTML structure: %s", exc)
         return cleaned_html
 
 
@@ -348,7 +352,7 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", id="tor-tbl")
     if not table:
-        logger.debug("No torrent table found in Rutracker response")
+        logger.debug("[rutracker] No torrent table found in response")
         return []
 
     results: list[_RawSearchItem] = []
@@ -416,10 +420,10 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
                 )
             )
         except Exception as exc:
-            logger.error("Error parsing Rutracker search row: %s", exc)
+            logger.error("[rutracker] Error parsing search row: %s", exc)
             continue
 
-    logger.debug("Parsed %d Rutracker search results", len(results))
+    logger.debug("[rutracker] Parsed %d search results", len(results))
     return results
 
 
@@ -487,7 +491,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         """Get detailed information about a torrent from Rutracker."""
-        logger.debug("Fetching movie details for Rutracker id %s", movie_id)
+        logger.debug("[rutracker] Fetching movie details for id %s", movie_id)
         
         try:
             # Fetch the torrent page HTML
@@ -532,7 +536,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
             )
         except Exception as exc:
             error_message = f"Error fetching Rutracker movie detail for id {movie_id}: {exc}"
-            logger.error(error_message, exc_info=True)
+            logger.error("[rutracker] %s", error_message, exc_info=True)
             raise RutrackerApiError(error_message) from exc
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
