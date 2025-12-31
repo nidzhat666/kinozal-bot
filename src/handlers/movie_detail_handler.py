@@ -15,7 +15,7 @@ from bot.constants import (
     SEARCH_MOVIE_CALLBACK,
 )
 from models.movie_detail_service_types import MovieDetails, MovieSearchResult
-from torrents import get_torrent_provider
+from torrents import get_torrent_provider, get_registered_providers
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import handlers_utils
 from utilities.handlers_utils import check_action
@@ -24,8 +24,6 @@ from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 router = Router(name=__name__)
-
-torrent_provider = get_torrent_provider()
 
 
 @router.callback_query(lambda c: check_action(c.data, MOVIE_DETAILED_CALLBACK))
@@ -75,6 +73,17 @@ async def handle_movie_selection(callback_query: CallbackQuery):
                     movie_id
                 )
         
+        # Final check: provider_name is required
+        if not provider_name:
+            error_msg = (
+                f"Не удалось определить провайдер для фильма ID: {movie_id}. "
+                f"Доступные провайдеры: {', '.join(get_registered_providers())}"
+            )
+            logger.error(error_msg)
+            await callback_query.message.answer(error_msg)
+            await callback_query.answer()
+            return
+        
         await send_movie_details(
             callback_query,
             movie_details,
@@ -83,9 +92,14 @@ async def handle_movie_selection(callback_query: CallbackQuery):
             tmdb_info=tmdb_info,
             provider_name=provider_name,
         )
+    except ValueError as e:
+        # Handle explicit errors about missing provider
+        logger.error(f"Provider error for movie ID {movie_id}: {e}", exc_info=True)
+        await callback_query.message.answer(str(e))
+        await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in fetching movie details: {e}", exc_info=True)
-        await callback_query.message.answer("Failed to retrieve movie details.")
+        await callback_query.message.answer("Не удалось получить детали фильма.")
         await callback_query.answer()
 
 
@@ -139,28 +153,25 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
                 exc,
             )
     
-    # Get provider by name if specified, otherwise use default
-    if provider_name:
-        try:
-            provider = get_torrent_provider(provider_name)
-            logger.info(
-                "Using provider '%s' for movie ID: %s",
-                provider_name,
-                movie_id
-            )
-        except KeyError:
-            logger.warning(
-                "Provider '%s' not found, falling back to default provider for movie ID: %s",
-                provider_name,
-                movie_id
-            )
-            provider = torrent_provider
-    else:
-        logger.warning(
-            "No provider_name specified, using default provider for movie ID: %s",
+    # Get provider by name - REQUIRED, no default
+    if not provider_name:
+        raise ValueError(
+            f"Provider name is required for movie ID: {movie_id}. "
+            "Cannot determine provider without explicit name."
+        )
+    
+    try:
+        provider = get_torrent_provider(provider_name)
+        logger.info(
+            "Using provider '%s' for movie ID: %s",
+            provider_name,
             movie_id
         )
-        provider = torrent_provider
+    except KeyError as e:
+        raise ValueError(
+            f"Provider '{provider_name}' not found for movie ID: {movie_id}. "
+            f"Available providers: {', '.join(get_registered_providers())}"
+        ) from e
     
     logger.info("Fetching movie details for movie ID: %s from provider: %s", movie_id, provider.name)
     return await provider.get_movie_detail(movie_id)
@@ -271,25 +282,20 @@ def create_reply_markup(
         }),
     )
     
-    # Get provider to generate tracker URL dynamically
-    # If provider_name is not specified, we can't determine the correct provider
-    # In this case, we should log a warning and try to use a fallback
-    if provider_name:
-        try:
-            provider = get_torrent_provider(provider_name)
-        except KeyError:
-            logger.warning(
-                "Provider '%s' not found for movie ID %s, using default provider for tracker URL",
-                provider_name,
-                movie_id
-            )
-            provider = get_torrent_provider()  # Use default
-    else:
-        logger.warning(
-            "No provider_name specified for movie ID %s, using default provider for tracker URL",
-            movie_id
+    # Get provider to generate tracker URL dynamically - REQUIRED, no default
+    if not provider_name:
+        raise ValueError(
+            f"Provider name is required for movie ID: {movie_id} to generate tracker URL. "
+            "Cannot determine provider without explicit name."
         )
-        provider = get_torrent_provider()  # Use default
+    
+    try:
+        provider = get_torrent_provider(provider_name)
+    except KeyError as e:
+        raise ValueError(
+            f"Provider '{provider_name}' not found for movie ID: {movie_id}. "
+            f"Available providers: {', '.join(get_registered_providers())}"
+        ) from e
     
     tracker_url = provider.get_torrent_url(movie_id)
     tracker_button = InlineKeyboardButton(

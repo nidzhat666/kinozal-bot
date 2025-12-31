@@ -24,7 +24,7 @@ from utilities.media_search_utils import (
     show_season_choices,
 )
 from utilities.torrent_search_utils import perform_torrent_search
-from torrents import get_torrent_provider
+from torrents import get_active_providers
 from . import movie_detail_handler
 
 logger = logging.getLogger(__name__)
@@ -143,9 +143,18 @@ async def handle_media_selection(callback_query: CallbackQuery):
         return
 
     # Handle movie search or series without seasons
-    provider = get_torrent_provider()
+    # Get max_query_length from first available provider (all providers should have same limit)
+    active_providers = get_active_providers()
+    if not active_providers:
+        await callback_query.answer(
+            "Нет активных торрент-провайдеров. Проверьте настройки.",
+            show_alert=True
+        )
+        return
+    max_query_length = active_providers[0].max_query_length
+    
     search_query = media_utils.build_torrent_query_from_media_details(
-        movie_details, max_length=provider.max_query_length
+        movie_details, max_length=max_query_length
     )
     search_context = (
         (redis_data.get("query") or "").strip()
@@ -195,12 +204,21 @@ async def handle_season_selection(callback_query: CallbackQuery):
         None,
     )
 
-    provider = get_torrent_provider()
+    # Get max_query_length from first available provider (all providers should have same limit)
+    active_providers = get_active_providers()
+    if not active_providers:
+        await callback_query.answer(
+            "Нет активных торрент-провайдеров. Проверьте настройки.",
+            show_alert=True
+        )
+        return
+    max_query_length = active_providers[0].max_query_length
+    
     search_query = media_utils.build_torrent_query_from_media_details(
         movie_details,
         season_number=season_number if len(movie_details.seasons) > 1 else None,
         season_year=season_year,
-        max_length=provider.max_query_length,
+        max_length=max_query_length,
     )
 
     requested_item = redis_data.get("requested_item", movie_details.title)

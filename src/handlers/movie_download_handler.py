@@ -8,11 +8,9 @@ from bot.constants import DOWNLOAD_TORRENT_CALLBACK, TORRENT_DEFAULT_CATEGORY
 from handlers.torrents_statuses_handler import handle_status_command
 from services.qbt_services import get_client
 from services.qbt_services.qbt_add_and_rename import add_torrent_and_rename
-from torrents import get_torrent_provider
+from torrents import get_torrent_provider, get_registered_providers
 from torrents.interfaces import DownloadResult
 from utilities.handlers_utils import check_action, redis_callback_get
-
-torrent_provider = get_torrent_provider()
 
 router = Router(name=__name__)
 logger = logging.getLogger(__name__)
@@ -27,7 +25,16 @@ async def handle_movie_download(callback_query: CallbackQuery):
     tmdb_info = callback_data.get("tmdb_info")
     provider_name = callback_data.get("provider_name")
     
-    logger.info(f"Handling download request for movie ID: {movie_id}, provider: {provider_name or 'default'}")
+    if not provider_name:
+        error_msg = (
+            f"Provider name is required for download. Movie ID: {movie_id}. "
+            f"Available providers: {', '.join(get_registered_providers())}"
+        )
+        logger.error(error_msg)
+        await callback_query.answer(error_msg, show_alert=True)
+        return
+    
+    logger.info(f"Handling download request for movie ID: {movie_id}, provider: {provider_name}")
 
     try:
         download_result = await _download_torrent(movie_id, provider_name)
@@ -41,15 +48,24 @@ async def handle_movie_download(callback_query: CallbackQuery):
         await callback_query.answer(f"Failed to add torrent: {e}")
 
 
-async def _download_torrent(movie_id: str, provider_name: str | None = None) -> DownloadResult:
-    """Download torrent file from provider."""
-    # Get provider by name if specified, otherwise use default
-    if provider_name:
-        provider = get_torrent_provider(provider_name)
-        logger.info(f"Using provider '{provider_name}' for download")
-    else:
-        provider = torrent_provider
-        logger.info(f"Using default provider for download")
+async def _download_torrent(movie_id: str, provider_name: str) -> DownloadResult:
+    """Download torrent file from provider.
+    
+    Args:
+        movie_id: Movie ID on the tracker.
+        provider_name: Provider name (required, no default).
+        
+    Raises:
+        ValueError: If provider_name is not provided.
+        KeyError: If provider is not found.
+    """
+    if not provider_name:
+        raise ValueError(
+            f"Provider name is required for download. Movie ID: {movie_id}"
+        )
+    
+    provider = get_torrent_provider(provider_name)
+    logger.info(f"Using provider '{provider_name}' for download of movie ID: {movie_id}")
     
     file_info = await provider.download_movie(movie_id)
     logger.info(f"Downloaded movie {movie_id} to: {file_info.file_path}")

@@ -22,21 +22,23 @@ if USE_RUTRACKER:
     )
 
 
-def get_torrent_provider(name: str | None = None) -> TorrentProviderProtocol:
+def get_torrent_provider(name: str) -> TorrentProviderProtocol:
     """Get torrent provider by name.
     
-    If name is None, returns the first available provider.
-    Raises KeyError if provider with given name is not found.
-    Raises LookupError if no providers are registered.
+    Args:
+        name: Provider name (required, no default).
+        
+    Returns:
+        TorrentProviderProtocol instance.
+        
+    Raises:
+        KeyError: If provider with given name is not found.
+        ValueError: If name is not provided.
     """
-    if name:
-        return registry.get(name)
+    if not name:
+        raise ValueError("Provider name is required. Cannot use default provider.")
     
-    # Return first available provider if no name specified
-    provider_names = list(registry.names())
-    if not provider_names:
-        raise LookupError("No torrent providers are registered.")
-    return registry.get(provider_names[0])
+    return registry.get(name)
 
 
 def get_registered_providers() -> tuple[str, ...]:
