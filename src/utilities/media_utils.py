@@ -145,44 +145,65 @@ def clean_title_for_query(title: str) -> str:
 def parse_video_quality(name: str) -> str | None:
     """Parse video quality from torrent name.
     
-    Checks more specific qualities first (REMUX, HDR variants),
-    then generic resolutions, then source-based fallbacks.
-    Uses match_rules that check for combinations of keywords.
+    Priority order (as per requirements):
+    1. BDRemux/UHD BDRemux/Remux
+    2. WEB-DL/WEBRip/WEB-DLRip
+    3. BDRip/BluRay
+    4. HDRip/HDTVRip/TVRip
+    5. DVDRip/DVD9
+    
+    Important: HDRip can NEVER be 4K HDR DV, even if HDR/DV keywords are present.
+    HDR/DV are attributes/flags, not quality classes.
     """
     name_lower = name.lower()
     
-    # Priority order: more specific qualities first
+    # Check for HDRip keyword - if present, 4K HDR DV/HDR can't match
+    has_hdrip_keyword = "hdrip" in name_lower or "hd-rip" in name_lower or "hd rip" in name_lower
+    
+    # Priority order: BDRemux → WEB-DL/WEBRip → BDRip/BluRay → HDRip → DVDRip
     priority_order = [
-        # 4K specific variants
+        # REMUX variants (highest priority)
         VideoQuality.UHD_4K_REMUX,
-        VideoQuality.UHD_4K_HDR_DV,
-        VideoQuality.UHD_4K_HDR,
-        VideoQuality.UHD_4K_BDRIP,
-        # 1080p specific variants
         VideoQuality.FHD_1080P_REMUX,
-        VideoQuality.FHD_1080P_BLURAY,
+        
+        # WEB-DL/WEBRip variants (high priority)
         VideoQuality.FHD_1080P_WEB,
-        VideoQuality.FHD_1080P_BDRIP,
-        # 720p specific variants
-        VideoQuality.HD_720P_BLURAY,
         VideoQuality.HD_720P_WEB,
+        VideoQuality.WEBRIP,  # WEBRip with or without resolution
+        
+        # BDRip/BluRay variants
+        VideoQuality.UHD_4K_BDRIP,
+        VideoQuality.FHD_1080P_BLURAY,
+        VideoQuality.FHD_1080P_BDRIP,
+        VideoQuality.HD_720P_BLURAY,
         VideoQuality.HD_720P_BDRIP,
-        # Source-based with resolution (check before generic resolutions)
-        VideoQuality.WEBRIP,  # WEBRip with resolution (e.g., "WEBRip (1080p)")
-        # Generic resolutions
+        VideoQuality.BDRIP,  # Generic BDRip
+        
+        # HDRip/HDTVRip (before generic resolutions)
+        VideoQuality.HDRIP,
+        
+        # Generic resolutions (check after source-based)
         VideoQuality.UHD_4K,
         VideoQuality.FHD_1080P,
         VideoQuality.HD_1080I,
         VideoQuality.HD_720P,
         VideoQuality.SD_576P,
         VideoQuality.SD_480P,
-        # Source-based fallbacks (without resolution)
-        VideoQuality.BDRIP,
-        VideoQuality.HDRIP,
+        
+        # DVDRip (low priority)
         VideoQuality.DVDRIP,
+        
+        # 4K HDR variants (check last, and only if NOT HDRip)
+        # These are treated as attributes/flags, not primary quality classes
+        VideoQuality.UHD_4K_HDR_DV,  # Only if not HDRip
+        VideoQuality.UHD_4K_HDR,    # Only if not HDRip
     ]
     
     for quality in priority_order:
+        # Special handling: 4K HDR DV/HDR can't be HDRip
+        if has_hdrip_keyword and quality in (VideoQuality.UHD_4K_HDR_DV, VideoQuality.UHD_4K_HDR):
+            continue
+        
         if _matches_quality_rules(name_lower, quality.match_rules):
             return quality
     

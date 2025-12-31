@@ -130,9 +130,10 @@ class VideoQuality(StrEnum):
                 ]
             case VideoQuality.UHD_4K_HDR_DV:
                 return [
-                    (["dolby vision"], []),
-                    (["dovi"], []),
-                    (["dv"], ["hdr"]),
+                    # Require 4K/UHD/2160p + Dolby Vision
+                    (["dolby vision"], ["2160p", "4k", "uhd"]),
+                    (["dovi"], ["2160p", "4k", "uhd"]),
+                    (["dv"], ["hdr", "2160p", "4k", "uhd"]),
                 ]
             case VideoQuality.UHD_4K_HDR:
                 return [

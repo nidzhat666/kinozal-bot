@@ -182,6 +182,158 @@ async def perform_torrent_search(
         await target_message.edit_text("Не удалось отобразить результаты поиска.")
 
 
+def _is_audio_release(result_name: str) -> bool:
+    """Check if result is an audio release (soundtrack, OST, MP3, FLAC, etc.).
+    
+    Returns True if the result name contains audio-related keywords.
+    Strictly filters out audio packs, audio tracks, and audio-only releases.
+    """
+    result_lower = result_name.lower()
+    
+    # Hard filters - always skip if these appear
+    hard_audio_keywords = [
+        "audio pack",
+        "[audio pack]",
+        "аудиодорож",
+        "озвучк",
+        "soundtrack",
+        "ost",
+        "mp3",
+        "flac",
+        "score",
+        "albums",
+        "album",
+        "tracks",
+        "track",
+        "lossless",
+        "аудио",
+        "саундтрек",
+        "музыка",
+    ]
+    
+    # Check hard filters first
+    for keyword in hard_audio_keywords:
+        if keyword in result_lower:
+            return True
+    
+    # Check AC3/DTS without video markers (audio-only, not video with AC3/DTS audio track)
+    audio_codecs = ["ac3", "dts"]
+    has_audio_codec = any(codec in result_lower for codec in audio_codecs)
+    
+    if has_audio_codec:
+        # Check if there are video markers - if not, it's likely audio-only
+        video_markers = [
+            "1080p", "2160p", "720p", "480p", "576p",
+            "bdrip", "bd-rip", "bluray", "blu-ray",
+            "web-dl", "webdl", "webrip", "web-rip",
+            "hdrip", "hd-rip", "dvdrip", "dvd-rip",
+            "remux", "uhd", "4k", "hdr", "hevc", "x265", "x264",
+        ]
+        has_video_marker = any(marker in result_lower for marker in video_markers)
+        
+        if not has_video_marker:
+            return True
+    
+    return False
+
+
+def _is_disc_image(result_name: str) -> bool:
+    """Check if result is a disc image (DVD9, DVD-5, NTSC, PAL, etc.).
+    
+    Returns True if the result name indicates a disc image format.
+    These are typically not useful for streaming/downloading.
+    """
+    result_lower = result_name.lower()
+    
+    # Disc image indicators
+    disc_keywords = [
+        "dvd9",
+        "dvd-9",
+        "dvd5",
+        "dvd-5",
+        "ntsc",
+        "pal",
+        "2 x dvd-9",
+        "2 x dvd9",
+    ]
+    
+    for keyword in disc_keywords:
+        if keyword in result_lower:
+            return True
+    
+    return False
+
+
+def _has_video_markers(result_name: str) -> bool:
+    """Check if result name contains explicit video quality markers.
+    
+    Returns True if the name contains indicators of video quality/resolution.
+    Used to filter out Unknown quality results that are likely not video.
+    """
+    result_lower = result_name.lower()
+    
+    # Video quality markers that indicate this is actually a video release
+    video_markers = [
+        # Resolutions
+        "1080p", "2160p", "720p", "480p", "576p", "1080i",
+        # Source types
+        "bdrip", "bd-rip", "bluray", "blu-ray", "blu ray",
+        "web-dl", "webdl", "webrip", "web-rip", "web dl",
+        "hdrip", "hd-rip", "hd rip",
+        "dvdrip", "dvd-rip", "dvd rip",
+        "remux", "bdremux", "bd-remux",
+        # Quality indicators
+        "uhd", "4k",
+        "hdr", "hdr10", "hdr10+",
+        "dolby vision", "dovi", "dv",
+        # Codecs (video)
+        "hevc", "x265", "h265",
+        "x264", "h264", "avc",
+    ]
+    
+    for marker in video_markers:
+        if marker in result_lower:
+            return True
+    
+    return False
+
+
+def _is_season_pack(result_name: str, target_season: int | None) -> bool:
+    """Check if result is a season pack (multiple seasons bundled together).
+    
+    Returns True if the result name indicates multiple seasons (e.g., "1-2 сезон", "S01-S02").
+    Only checks when target_season is specified (i.e., we're looking for a specific season).
+    """
+    if target_season is None:
+        return False
+    
+    result_lower = result_name.lower()
+    
+    # Patterns that indicate multiple seasons
+    # Examples: "1-2 сезон", "S01-S02", "сезоны 1-4", "полный", "все сезоны"
+    # Also handles cases like "(1-2 сезон: 1-17 серии из 17)"
+    pack_patterns = [
+        r"\d+\s*-\s*\d+\s*сезон",  # "1-2 сезон", "1-4 сезон", "(1-2 сезон: ...)"
+        r"\d+\s*-\s*\d+\s*сезоны",  # "1-2 сезоны" (plural)
+        r"s\d+\s*-\s*s\d+",  # "S01-S02", "S1-S4"
+        r"s\d+\s*-\s*\d+",  # "S01-02" (alternative format)
+        r"\d+\s*-\s*s\d+",  # "1-S02" (alternative format)
+        r"сезоны?\s*\d+\s*-\s*\d+",  # "сезоны 1-4", "сезон 1-2"
+        r"полный",  # "полный"
+        r"все\s+сезоны?",  # "все сезоны"
+        r"полный\s+сезон",  # "полный сезон"
+        r"complete",  # "complete"
+        r"full\s+season",  # "full season"
+        r"все\s+серии",  # "все серии"
+    ]
+    
+    for pattern in pack_patterns:
+        if re.search(pattern, result_lower):
+            return True
+    
+    return False
+
+
 def _filter_and_process_results(
     raw_results: list[MovieSearchResult],
     media_details: MediaDetails | None,
@@ -215,6 +367,52 @@ def _filter_and_process_results(
             result.video_quality = parse_video_quality(result_name)
 
         provider_name = result.provider_name or "unknown"
+        
+        # Filter out audio releases (soundtracks, OST, MP3, FLAC, audio pack, etc.)
+        if _is_audio_release(result_name):
+            skip_reasons["audio_release"] += 1
+            logger.info(
+                "[%s] SKIP audio_release: [%s] %s",
+                provider_name,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
+            continue
+        
+        # Filter out disc images (DVD9, DVD-5, NTSC, PAL, etc.)
+        if _is_disc_image(result_name):
+            skip_reasons["disc_image"] += 1
+            logger.info(
+                "[%s] SKIP disc_image: [%s] %s",
+                provider_name,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
+            continue
+        
+        # Filter out Unknown quality results that don't have video markers
+        if result.video_quality is None or result.video_quality == "Unknown":
+            if not _has_video_markers(result_name):
+                skip_reasons["unknown_quality"] += 1
+                logger.info(
+                    "[%s] SKIP unknown_quality (no video markers): [%s] %s",
+                    provider_name,
+                    result.video_quality or "N/A",
+                    result_name[:80],
+                )
+                continue
+        
+        # Filter out season packs when looking for a specific season
+        if _is_season_pack(result_name, season_number):
+            skip_reasons["season_pack"] += 1
+            logger.info(
+                "[%s] SKIP season_pack (S%02d): [%s] %s",
+                provider_name,
+                season_number,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
+            continue
         
         if season_number is not None and not is_season_match(
             result_name, season_number
@@ -438,9 +636,16 @@ def _create_result_button(
         "results_cache_key": results_cache_key,
     }
     
-    # Include provider_name if available
+    # Always include provider_name (should always be set by providers)
+    # This ensures we use the correct provider when fetching details
     if result.provider_name:
         payload["provider_name"] = result.provider_name
+    else:
+        logger.warning(
+            "MovieSearchResult missing provider_name for movie ID: %s, name: %s",
+            result.id,
+            result.name[:50] if result.name else "unknown"
+        )
     
     if media_details:
         payload["tmdb_info"] = {

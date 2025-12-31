@@ -8,9 +8,17 @@ if TYPE_CHECKING:
 
 
 class DownloadResult:
-    def __init__(self, *, file_path: str, filename: str) -> None:
+    def __init__(
+        self,
+        *,
+        file_path: str | None = None,
+        filename: str | None = None,
+        magnet_link: str | None = None
+    ) -> None:
         self.file_path = file_path
         self.filename = filename
+        self.magnet_link = magnet_link
+
 
 
 class TorrentProviderProtocol(Protocol):
