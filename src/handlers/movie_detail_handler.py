@@ -204,7 +204,8 @@ async def send_movie_details(
         logger.info("Fallback tmdb_info: %s", tmdb_info)
 
     qbt_client = await get_client(**QBT_CREDENTIALS)
-    categories = await qbt_get_categories(qbt_client)
+    async with qbt_client:
+        categories = await qbt_get_categories(qbt_client)
 
     reply_markup = create_reply_markup(
         movie_id,

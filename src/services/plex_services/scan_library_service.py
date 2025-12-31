@@ -1,7 +1,7 @@
 import logging
 
 from asyncio import gather
-from aiohttp import ClientSession
+import httpx
 
 from bot.config import PLEX_URL, PLEX_TOKEN
 
@@ -22,20 +22,20 @@ def get_headers():
 
 async def call_plex(library_id: int) -> bool:
     headers = get_headers()
-    async with ClientSession() as session:
-        async with session.get(
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        response = await client.get(
             get_url(f"/library/sections/{library_id}/refresh"), headers=headers
-        ) as response:
-            if response.status == 200:
-                logger.info(
-                    f"Plex library refresh initiated successfully with id: {library_id}"
-                )
-                return True
-            else:
-                logger.error(
-                    f"Failed to initiate Plex library refresh with id: {library_id}"
-                )
-                return False
+        )
+        if response.status_code == 200:
+            logger.info(
+                f"Plex library refresh initiated successfully with id: {library_id}"
+            )
+            return True
+        else:
+            logger.error(
+                f"Failed to initiate Plex library refresh with id: {library_id}"
+            )
+            return False
 
 
 async def refresh_plex_library():

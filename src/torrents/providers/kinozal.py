@@ -7,9 +7,8 @@ from pathlib import Path
 from time import perf_counter
 
 import aiofile
-import aiohttp
+import httpx
 from bs4 import BeautifulSoup
-from yarl import URL
 
 from models.movie_detail_service_types import (
     MovieDetails,
@@ -109,15 +108,15 @@ async def _fetch_movie_details(movie_id: int | str) -> MovieDetails:
 async def _get_text(path: str, *, params: dict[str, str | int] | None = None) -> str:
     url = get_url(path)
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params) as response:
-                logger.debug("[kinozal] GET %s -> %s", response.url, response.status)
-                if response.status != 200:
-                    raise KinozalApiError(
-                        f"Kinozal request to {response.url} failed with status {response.status}."
-                    )
-                return await response.text()
-    except aiohttp.ClientError as exc:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.get(url, params=params)
+            logger.debug("[kinozal] GET %s -> %s", response.url, response.status_code)
+            if response.status_code != 200:
+                raise KinozalApiError(
+                    f"Kinozal request to {response.url} failed with status {response.status_code}."
+                )
+            return response.text
+    except httpx.HTTPError as exc:
         error_message = f"HTTP client error while requesting {url}: {exc}"
         logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
@@ -315,15 +314,15 @@ async def _download_movie(
     url = get_url(f"/download.php?id={movie_id}")
 
     try:
-        async with aiohttp.ClientSession(cookies=cookies) as session:
-            async with session.get(url) as response:
-                logger.debug("[kinozal] GET %s -> %s", response.url, response.status)
-                if response.status != 200:
-                    raise KinozalApiError(
-                        f"Failed to download movie {movie_id}: HTTP {response.status}."
-                    )
-                payload = await response.read()
-    except aiohttp.ClientError as exc:
+        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
+            response = await client.get(url)
+            logger.debug("[kinozal] GET %s -> %s", response.url, response.status_code)
+            if response.status_code != 200:
+                raise KinozalApiError(
+                    f"Failed to download movie {movie_id}: HTTP {response.status_code}."
+                )
+            payload = response.content
+    except httpx.HTTPError as exc:
         error_message = (
             f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
         )
@@ -354,16 +353,18 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, data=data, headers=headers) as response:
-                logger.debug("POST %s -> %s", response.url, response.status)
-                if response.status != 200:
-                    raise KinozalApiError(
-                        f"Kinozal authentication failed with status {response.status}."
-                    )
-            kinozal_url = URL(kinozal_utils.get_url())
-            cookies = session.cookie_jar.filter_cookies(kinozal_url)
-    except aiohttp.ClientError as exc:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            response = await client.post(url, data=data, headers=headers)
+            logger.debug("POST %s -> %s", response.url, response.status_code)
+            if response.status_code != 200:
+                raise KinozalApiError(
+                    f"Kinozal authentication failed with status {response.status_code}."
+                )
+            # Extract cookies from response
+            cookies = {}
+            for cookie_name, cookie_value in response.cookies.items():
+                cookies[cookie_name] = cookie_value
+    except httpx.HTTPError as exc:
         error_message = f"HTTP client error during Kinozal authentication: {exc}"
         logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
@@ -373,7 +374,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     if not uid_cookie or not pass_cookie:
         raise KinozalApiError("Kinozal authentication cookies are missing.")
 
-    return {"uid": uid_cookie.value, "pass": pass_cookie.value}
+    return {"uid": uid_cookie, "pass": pass_cookie}
 
 
 class KinozalTorrentProvider(TorrentProviderProtocol):
