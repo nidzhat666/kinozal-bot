@@ -570,8 +570,9 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
     
     Matches if:
     1. Expected title is at the start of result name (with optional prefix like "сезон")
-    2. Expected title is the main title (before separators like ":", "/", "-")
-    3. High similarity (>0.7) for fuzzy matching
+    2. Expected title appears anywhere in result name (for cases like "Russian Title / English Title")
+    3. Expected title words appear in sequence anywhere in result name
+    4. High similarity (>0.7) for fuzzy matching
     """
     result_clean = clean_title_for_query(result_name).lower()
 
@@ -587,6 +588,15 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
             if re.match(prefix_pattern, result_clean):
                 result_without_prefix = re.sub(prefix_pattern, '', result_clean).strip()
                 break
+        
+        # Check if expected title is at the very start (after prefixes)
+        if result_without_prefix.startswith(expected_clean):
+            return True
+        
+        # Check if expected title appears anywhere in the result name
+        # This handles cases like "Russian Title / English Title / Year"
+        if expected_clean in result_clean:
+            return True
         
         # Extract main title (before separators like ":", "/", "-")
         # This handles cases like "Wise Guy: David Chase and the Sopranos"
@@ -604,9 +614,32 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
                 if main_title_words[:len(expected_words)] == expected_words:
                     return True
         
-        # Also check if expected title is at the very start (after prefixes)
-        if result_without_prefix.startswith(expected_clean):
-            return True
+        # Check if expected title words appear in sequence anywhere in result name
+        # This handles cases where the title is split by separators
+        expected_words = expected_clean.split()
+        if len(expected_words) > 0:
+            # Create a pattern that matches all words in sequence (with optional separators between)
+            # This allows for "El Camino: A Breaking Bad Movie" to match "El Camino / A Breaking Bad Movie"
+            words_pattern = r'\s*[:\-/\|]\s*'.join(re.escape(word) for word in expected_words)
+            if re.search(words_pattern, result_clean):
+                return True
+            
+            # Also check if all words appear in order (not necessarily adjacent)
+            # This is more lenient but still requires words to be in the correct order
+            result_words = result_clean.split()
+            expected_word_index = 0
+            for result_word in result_words:
+                if expected_word_index < len(expected_words):
+                    # Check if current result word contains or matches expected word
+                    if expected_words[expected_word_index] in result_word or result_word in expected_words[expected_word_index]:
+                        expected_word_index += 1
+                    # Also handle cases where words might be combined (e.g., "el camino" vs "elcamino")
+                    elif len(expected_words[expected_word_index]) > 3:  # Only for longer words to avoid false matches
+                        if expected_words[expected_word_index][:4] in result_word or result_word[:4] in expected_words[expected_word_index]:
+                            expected_word_index += 1
+            
+            if expected_word_index == len(expected_words):
+                return True
         
         # Stricter similarity threshold for fuzzy matching
         if calculate_similarity(expected, result_name) > 0.7:
