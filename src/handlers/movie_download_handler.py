@@ -25,11 +25,12 @@ async def handle_movie_download(callback_query: CallbackQuery):
     movie_id = callback_data.get("movie_id")
     category = callback_data.get("category")
     tmdb_info = callback_data.get("tmdb_info")
+    provider_name = callback_data.get("provider_name")
     
-    logger.info(f"Handling download request for movie ID: {movie_id}")
+    logger.info(f"Handling download request for movie ID: {movie_id}, provider: {provider_name or 'default'}")
 
     try:
-        download_result = await _download_torrent(movie_id)
+        download_result = await _download_torrent(movie_id, provider_name)
         await _add_to_qbittorrent(download_result, category, tmdb_info)
         
         await callback_query.message.delete_reply_markup()
@@ -40,9 +41,17 @@ async def handle_movie_download(callback_query: CallbackQuery):
         await callback_query.answer(f"Failed to add torrent: {e}")
 
 
-async def _download_torrent(movie_id: str) -> DownloadResult:
+async def _download_torrent(movie_id: str, provider_name: str | None = None) -> DownloadResult:
     """Download torrent file from provider."""
-    file_info = await torrent_provider.download_movie(movie_id)
+    # Get provider by name if specified, otherwise use default
+    if provider_name:
+        provider = get_torrent_provider(provider_name)
+        logger.info(f"Using provider '{provider_name}' for download")
+    else:
+        provider = torrent_provider
+        logger.info(f"Using default provider for download")
+    
+    file_info = await provider.download_movie(movie_id)
     logger.info(f"Downloaded movie {movie_id} to: {file_info.file_path}")
     return file_info
 

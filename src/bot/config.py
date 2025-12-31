@@ -47,5 +47,8 @@ WEB_SERVER_PORT = int(os.getenv("WEB_SERVER_PORT", 8000))
 
 USE_POLLING = os.getenv("USE_POLLING", "False").lower() in ("true", "1", "yes")
 
+USE_KINOZAL = os.getenv("USE_KINOZAL", "1").lower() in ("true", "1", "yes")
+USE_RUTRACKER = os.getenv("USE_RUTRACKER", "1").lower() in ("true", "1", "yes")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

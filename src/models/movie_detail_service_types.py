@@ -36,6 +36,32 @@ class VideoQuality(StrEnum):
     WEBRIP = "WEBRip"
 
     @property
+    def priority(self) -> int:
+        """Return priority for sorting (lower number = better quality).
+        
+        Priority is based on emoji rating:
+        🥇 (Gold) = 0 (best)
+        🥈 (Silver) = 1
+        🥉 (Bronze) = 2
+        ⚠️ (Caution) = 3
+        ❌ (Avoid) = 4 (worst)
+        """
+        emoji = self.rating_emoji
+        if emoji == "🥇":
+            return 0
+        elif emoji == "🥈":
+            return 1
+        elif emoji == "🥉":
+            return 2
+        elif emoji == "⚠️":
+            return 3
+        elif emoji == "❌":
+            return 4
+        else:
+            # Unknown/❓ - treat as worst
+            return 999
+
+    @property
     def rating_emoji(self) -> str:
         """Return quality rating emoji based on preference ranking.
         
@@ -255,6 +281,7 @@ class MovieSearchResult(MovieDetails):
     seeds: int | None = None
     peers: int | None = None
     has_full_details: bool = False
+    provider_name: str | None = None
 
     @classmethod
     def from_search_data(
@@ -267,6 +294,7 @@ class MovieSearchResult(MovieDetails):
         seeds: int | None = None,
         peers: int | None = None,
         has_full_details: bool = False,
+        provider_name: str | None = None,
     ) -> "MovieSearchResult":
         return cls(
             movie_id=str(search_id),
@@ -275,5 +303,6 @@ class MovieSearchResult(MovieDetails):
             seeds=seeds,
             peers=peers,
             has_full_details=has_full_details,
+            provider_name=provider_name,
             **details.model_dump(),
         )

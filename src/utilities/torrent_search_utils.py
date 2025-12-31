@@ -16,7 +16,7 @@ from aiogram.types import (
 from bot.constants import MOVIE_DETAILED_CALLBACK
 from models.movie_detail_service_types import MovieSearchResult, VideoQuality
 from models.search_provider_types import MediaDetails
-from torrents import get_torrent_provider
+from torrents import get_active_providers
 from utilities.media_utils import (
     calculate_similarity,
     clean_title_for_query,
@@ -71,9 +71,16 @@ async def perform_torrent_search(
     queries = {q for q in queries if q.strip()}
     logger.info("Performing parallel search for queries: %s", queries)
 
-    provider = get_torrent_provider()
+    active_providers = get_active_providers()
+    if not active_providers:
+        target_message = callback_query.message if callback_query else message
+        await target_message.edit_text("Нет активных торрент-провайдеров. Проверьте настройки.")
+        return
+
+    logger.info("Searching in %d active providers: %s", len(active_providers), [p.name for p in active_providers])
     target_message = callback_query.message if callback_query else message
 
+    # Create tasks: for each query, search in all active providers
     tasks = [
         provider.search(
             q,
@@ -81,6 +88,7 @@ async def perform_torrent_search(
             requested_type=requested_type,
         )
         for q in queries
+        for provider in active_providers
     ]
 
     try:
@@ -89,7 +97,7 @@ async def perform_torrent_search(
         raw_results = []
         for res in results_list:
             if isinstance(res, Exception):
-                logger.warning(f"Search failed for one of the queries: {res}")
+                logger.warning(f"Search failed for one of the queries/providers: {res}")
             elif isinstance(res, list):
                 raw_results.extend(res)
 
@@ -292,21 +300,58 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
     return False
 
 
+def _get_quality_priority(quality: VideoQuality | str | None) -> int:
+    """Get priority for quality sorting (lower = better quality).
+    
+    Returns priority from VideoQuality enum if quality is recognized,
+    otherwise returns high priority (999) for unknown qualities.
+    """
+    if quality is None:
+        return 999
+    
+    # If already VideoQuality enum, use priority directly
+    if isinstance(quality, VideoQuality):
+        return quality.priority
+    
+    # If string, try to convert to VideoQuality
+    if isinstance(quality, str):
+        try:
+            video_quality = VideoQuality(quality)
+            return video_quality.priority
+        except ValueError:
+            # Unknown quality string
+            return 999
+    
+    return 999
+
+
 def _sort_and_group_results(
     results: list[MovieSearchResult],
 ) -> list[MovieSearchResult]:
-    def get_quality(r: MovieSearchResult) -> str:
+    """Group results by quality and select best (max seeds) from each group.
+    
+    Then sort final results by quality priority (lower priority = better quality).
+    """
+    def get_quality_key(r: MovieSearchResult) -> str:
+        """Get quality as string for grouping."""
         return r.video_quality or "N/A"
 
-    results.sort(key=get_quality)
+    # Sort by quality for grouping
+    results.sort(key=get_quality_key)
     best_results = []
 
-    for _, group in groupby(results, key=get_quality):
-        best_in_group = max(group, key=lambda r: r.seeds if r.seeds is not None else -1)
+    # Group by quality and select best (max seeds) from each group
+    for _, group in groupby(results, key=get_quality_key):
+        group_list = list(group)
+        best_in_group = max(
+            group_list, 
+            key=lambda r: r.seeds if r.seeds is not None else -1
+        )
         best_results.append(best_in_group)
 
+    # Sort final results by quality priority (lower = better)
     best_results.sort(
-        key=lambda r: r.seeds if r.seeds is not None else -1, reverse=True
+        key=lambda r: _get_quality_priority(r.video_quality)
     )
     return best_results
 
@@ -359,6 +404,10 @@ def _create_result_button(
         "movie_id": result.id,
         "results_cache_key": results_cache_key,
     }
+    
+    # Include provider_name if available
+    if result.provider_name:
+        payload["provider_name"] = result.provider_name
     
     if media_details:
         payload["tmdb_info"] = {

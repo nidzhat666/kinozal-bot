@@ -39,12 +39,18 @@ async def handle_movie_selection(callback_query: CallbackQuery):
 
     try:
         movie_details = await _get_movie_details(callback_data, movie_id)
+        # Extract provider_name from movie_details if it's a MovieSearchResult
+        provider_name = None
+        if isinstance(movie_details, MovieSearchResult) and movie_details.provider_name:
+            provider_name = movie_details.provider_name
+        
         await send_movie_details(
             callback_query,
             movie_details,
             movie_id,
             results_cache_key,
             tmdb_info=tmdb_info,
+            provider_name=provider_name,
         )
     except Exception as e:
         logger.error(f"Error in fetching movie details: {e}", exc_info=True)
@@ -54,10 +60,16 @@ async def handle_movie_selection(callback_query: CallbackQuery):
 
 async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails:
     """Retrieve movie details from cache or fetch from provider."""
+    provider_name = callback_data.get("provider_name")
+    
     if movie_details_data := callback_data.get("movie_details"):
         try:
             logger.info("Using cached movie details for movie ID: %s", movie_id)
-            return MovieSearchResult.model_validate(movie_details_data)
+            result = MovieSearchResult.model_validate(movie_details_data)
+            # Use provider_name from cached data if available
+            if result.provider_name:
+                provider_name = result.provider_name
+            return result
         except ValidationError as exc:
             logger.warning(
                 "Failed to use cached movie details for ID %s: %s. Refetching.",
@@ -65,8 +77,14 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
                 exc,
             )
     
-    logger.info("Fetching movie details for movie ID: %s", movie_id)
-    return await torrent_provider.get_movie_detail(movie_id)
+    # Get provider by name if specified, otherwise use default
+    if provider_name:
+        provider = get_torrent_provider(provider_name)
+    else:
+        provider = torrent_provider
+    
+    logger.info("Fetching movie details for movie ID: %s from provider: %s", movie_id, provider.name)
+    return await provider.get_movie_detail(movie_id)
 
 
 async def send_movie_details(
@@ -75,6 +93,7 @@ async def send_movie_details(
     movie_id: int | str,
     results_cache_key: str | None,
     tmdb_info: dict | None = None,
+    provider_name: str | None = None,
 ) -> None:
     """Send formatted movie details with download buttons."""
     message_caption = format_movie_details_message(movie_details)
@@ -95,6 +114,7 @@ async def send_movie_details(
         categories,
         results_cache_key,
         tmdb_info=tmdb_info,
+        provider_name=provider_name,
     )
     await callback_query.message.edit_text(
         message_caption, parse_mode=SULGUK_PARSE_MODE, reply_markup=reply_markup
@@ -107,6 +127,7 @@ def create_reply_markup(
     categories: list[str],
     results_cache_key: str | None,
     tmdb_info: dict | None = None,
+    provider_name: str | None = None,
 ) -> InlineKeyboardMarkup:
     """Create inline keyboard with download buttons and navigation."""
     download_buttons = [
@@ -118,6 +139,7 @@ def create_reply_markup(
                 "category": category,
                 "query": query,
                 "tmdb_info": tmdb_info,
+                "provider_name": provider_name,
             }),
         )
         for category in categories
@@ -132,7 +154,7 @@ def create_reply_markup(
     )
     
     # Get provider to generate tracker URL dynamically
-    provider = get_torrent_provider()
+    provider = get_torrent_provider(provider_name)
     tracker_url = provider.get_torrent_url(movie_id)
     tracker_button = InlineKeyboardButton(
         text=f"Открыть в {provider.name.capitalize()}",

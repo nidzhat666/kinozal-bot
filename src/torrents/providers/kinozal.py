@@ -89,6 +89,7 @@ def _build_movie_search_result(
         details=details,
         seeds=item.seeds,
         peers=item.peers,
+        provider_name="kinozal",
     )
 
 
