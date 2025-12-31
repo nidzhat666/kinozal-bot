@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import bleach
 import httpx
 from bs4 import BeautifulSoup
-from sulguk import transform_html
 
 from bot.config import RUTRACKER_URL
 from services.exceptions import RutrackerApiError
@@ -14,7 +13,6 @@ from models.movie_detail_service_types import (
     MovieDetails,
     MovieRatings,
     MovieSearchResult,
-    TorrentDetails,
 )
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 
@@ -23,6 +21,17 @@ logger = logging.getLogger(__name__)
 
 def get_url(path: str = "") -> str:
     return f"https://{RUTRACKER_URL}{path}"
+
+
+async def _build_auth_cookies(credentials: dict[str, str] | None) -> dict[str, str]:
+    if not credentials:
+        return {}
+
+    try:
+        return await _authenticate(credentials)
+    except Exception as exc:
+        logger.warning("Failed to authenticate with Rutracker, using guest access: %s", exc)
+        return {}
 
 
 async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
@@ -51,19 +60,10 @@ class _RawSearchItem:
 
 
 async def _search_movies(
-    query: str,
-    *,
-    requested_item: str | None = None,
-    requested_type: str | None = None,
-    credentials: dict[str, str] | None = None,
+    query: str, *, credentials: dict[str, str] | None = None
 ) -> list[MovieSearchResult]:
     """Search for torrents on Rutracker."""
-    logger.debug(
-        "Starting Rutracker search for query '%s' (requested_item=%s, requested_type=%s)",
-        query,
-        requested_item,
-        requested_type,
-    )
+    logger.debug("Starting Rutracker search for query '%s'", query)
 
     raw_items = await _fetch_search_items(query, credentials)
     if not raw_items:
@@ -100,16 +100,7 @@ async def _get_search_text(
     query: str, credentials: dict[str, str] | None = None
 ) -> str:
     """Get HTML content from Rutracker search page."""
-    cookies = {}
-    if credentials:
-        try:
-            auth_cookies = await _authenticate(credentials)
-            cookies.update(auth_cookies)
-        except Exception as e:
-            logger.warning(
-                "Failed to authenticate with Rutracker, trying guest search: %s", e
-            )
-
+    cookies = await _build_auth_cookies(credentials)
     url = get_url("/forum/tracker.php")
     params = {"nm": query}
 
@@ -129,16 +120,7 @@ async def _fetch_torrent_page(
     movie_id: int | str, credentials: dict[str, str] | None = None
 ) -> str:
     """Get HTML content from Rutracker torrent page."""
-    cookies = {}
-    if credentials:
-        try:
-            auth_cookies = await _authenticate(credentials)
-            cookies.update(auth_cookies)
-        except Exception as e:
-            logger.warning(
-                "Failed to authenticate with Rutracker, trying guest access: %s", e
-            )
-
+    cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/viewtopic.php?t={movie_id}")
 
     try:
@@ -244,10 +226,6 @@ def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
     """Extract HTML content from the first post_body element."""
     post_body = soup.find("div", class_="post_body")
     if not post_body:
-        # Try alternative class name without quotes
-        post_body = soup.find("div", {"class": "post_body"})
-    
-    if not post_body:
         logger.warning("post_body element not found on page")
         return None
     
@@ -263,11 +241,7 @@ def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
 
 
 def _clean_and_convert_html(html: str) -> str:
-    """Clean HTML with bleach and convert to Telegram format with sulguk.
-    
-    First cleans the HTML with bleach to remove dangerous tags/attributes,
-    then converts it to Telegram-compatible format using sulguk.
-    """
+    """Clean HTML with bleach and normalize common Rutracker markup."""
     # Define allowed tags for Telegram HTML
     # Based on Telegram's supported tags
     allowed_tags = [
@@ -316,8 +290,9 @@ def _clean_and_convert_html(html: str) -> str:
             span.replace_with(bold_tag)
             
         return str(soup)
-    except Exception as e:
-        logger.warning("Failed to process HTML structure: %s", e)
+    except Exception as exc:
+        logger.warning("Failed to process HTML structure: %s", exc)
+        return cleaned_html
 
 
 def _parse_search_results(html: str) -> list[_RawSearchItem]:
@@ -459,19 +434,10 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         requested_type: str | None = None,
     ) -> list[MovieSearchResult]:
         """Search for torrents on Rutracker."""
-        return await _search_movies(
-            query,
-            requested_item=requested_item,
-            requested_type=requested_type,
-            credentials=self._credentials,
-        )
+        return await _search_movies(query, credentials=self._credentials)
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
-        """Get detailed information about a torrent from Rutracker.
-        
-        Extracts the first post_body element, cleans it with bleach,
-        and converts it to Telegram-compatible HTML with sulguk.
-        """
+        """Get detailed information about a torrent from Rutracker."""
         logger.debug("Fetching movie details for Rutracker id %s", movie_id)
         
         try:
