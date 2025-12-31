@@ -298,6 +298,68 @@ def _has_video_markers(result_name: str) -> bool:
     return False
 
 
+def _has_multiple_resolutions(result_name: str) -> bool:
+    """Check if result name contains multiple video resolutions (e.g., both 1080p and 720p).
+    
+    Returns True if the name contains multiple resolution indicators that indicate
+    the release contains multiple video tracks in one file.
+    Examples: "WEB-DL HD (1080p, 720p)", "1080p + 720p", etc.
+    """
+    result_lower = result_name.lower()
+    
+    # Common resolution patterns
+    resolutions = {
+        "1080p": r"\b1080p\b",
+        "720p": r"\b720p\b",
+        "2160p": r"\b2160p\b",
+        "4k": r"\b4k\b",
+        "480p": r"\b480p\b",
+        "576p": r"\b576p\b",
+    }
+    
+    found_resolutions = []
+    for res_name, pattern in resolutions.items():
+        if re.search(pattern, result_lower):
+            found_resolutions.append(res_name)
+    
+    # Filter out if multiple resolutions found (especially 1080p + 720p combination)
+    if len(found_resolutions) > 1:
+        # Specifically filter out 1080p + 720p combinations
+        if "1080p" in found_resolutions and "720p" in found_resolutions:
+            return True
+    
+    return False
+
+
+def _has_multiple_video_tracks(result_name: str) -> bool:
+    """Check if result name indicates multiple video tracks in one file.
+    
+    Returns True if the name contains indicators of multiple video tracks.
+    Examples: "2 видео", "2 video", "dual video", "multiple video tracks", etc.
+    """
+    result_lower = result_name.lower()
+    
+    # Patterns that indicate multiple video tracks
+    multiple_track_patterns = [
+        r"\d+\s+видео",  # "2 видео", "две видео"
+        r"\d+\s+video",  # "2 video", "dual video"
+        r"dual\s+video",  # "dual video"
+        r"multiple\s+video",  # "multiple video"
+        r"двойное\s+видео",  # "двойное видео"
+        r"две\s+видеодорожки",  # "две видеодорожки"
+        r"2\s+видеодорожки",  # "2 видеодорожки"
+        r"видеодорожки\s*\d+",  # "видеодорожки 2"
+        r"video\s+tracks?\s*\d+",  # "video tracks 2"
+        r"\d+\s+video\s+tracks?",  # "2 video tracks"
+    ]
+    
+    for pattern in multiple_track_patterns:
+        if re.search(pattern, result_lower):
+            return True
+    
+    return False
+
+
 def _is_season_pack(result_name: str, target_season: int | None) -> bool:
     """Check if result is a season pack (multiple seasons bundled together).
     
@@ -384,6 +446,28 @@ def _filter_and_process_results(
             skip_reasons["disc_image"] += 1
             logger.info(
                 "[%s] SKIP disc_image: [%s] %s",
+                provider_name,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
+            continue
+        
+        # Filter out releases with multiple resolutions (e.g., 1080p + 720p in one file)
+        if _has_multiple_resolutions(result_name):
+            skip_reasons["multiple_resolutions"] += 1
+            logger.info(
+                "[%s] SKIP multiple_resolutions: [%s] %s",
+                provider_name,
+                result.video_quality or "N/A",
+                result_name[:80],
+            )
+            continue
+        
+        # Filter out releases with multiple video tracks
+        if _has_multiple_video_tracks(result_name):
+            skip_reasons["multiple_video_tracks"] += 1
+            logger.info(
+                "[%s] SKIP multiple_video_tracks: [%s] %s",
                 provider_name,
                 result.video_quality or "N/A",
                 result_name[:80],

@@ -355,15 +355,51 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.post(url, data=data, headers=headers)
-            logger.debug("POST %s -> %s", response.url, response.status_code)
+            logger.debug(
+                "[kinozal] POST %s -> %s (final URL: %s)",
+                url,
+                response.status_code,
+                response.url,
+            )
             if response.status_code != 200:
                 raise KinozalApiError(
                     f"Kinozal authentication failed with status {response.status_code}."
                 )
-            # Extract cookies from response
+            # Check if we were redirected (successful login usually redirects)
+            was_redirected = str(response.url) != url
+            logger.debug(
+                "[kinozal] Authentication redirect: %s (login URL: %s, final URL: %s)",
+                was_redirected,
+                url,
+                response.url,
+            )
+            # Extract cookies from response and client cookie jar
+            # httpx automatically handles cookies across redirects when follow_redirects=True
             cookies = {}
+            # First, get cookies from response (should include cookies from redirect chain)
             for cookie_name, cookie_value in response.cookies.items():
                 cookies[cookie_name] = cookie_value
+            # Also check client's cookies (cookies are stored in client's cookie jar after redirects)
+            # client.cookies is a Cookies object that behaves like a dict
+            try:
+                # Try to get cookies from client's cookie jar
+                client_cookies = dict(client.cookies)
+                cookies.update(client_cookies)
+            except (AttributeError, TypeError, ValueError):
+                # If client.cookies is not accessible as dict, try alternative methods
+                try:
+                    # Try accessing cookies directly
+                    if hasattr(client.cookies, 'jar'):
+                        for cookie in client.cookies.jar:
+                            cookies[cookie.name] = cookie.value
+                except (AttributeError, TypeError):
+                    pass
+
+            logger.debug(
+                "[kinozal] Authentication response cookies: %s (from response: %s)",
+                list(cookies.keys()) if cookies else "none",
+                list(response.cookies.keys()) if response.cookies else "none",
+            )
     except httpx.HTTPError as exc:
         error_message = f"HTTP client error during Kinozal authentication: {exc}"
         logger.error("[kinozal] %s", error_message)
@@ -372,6 +408,12 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     uid_cookie = cookies.get("uid")
     pass_cookie = cookies.get("pass")
     if not uid_cookie or not pass_cookie:
+        logger.error(
+            "[kinozal] Authentication failed: cookies missing. "
+            "Received cookies: %s. Response URL: %s",
+            list(cookies.keys()),
+            response.url,
+        )
         raise KinozalApiError("Kinozal authentication cookies are missing.")
 
     return {"uid": uid_cookie, "pass": pass_cookie}

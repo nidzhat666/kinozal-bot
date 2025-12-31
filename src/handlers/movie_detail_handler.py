@@ -373,11 +373,12 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         # If HTML content is available, use it but limit its length
         html_content = movie_details.torrent_html_content
         # Reserve space for basic info and section header
-        available_for_html = TELEGRAM_MESSAGE_SAFE_LENGTH - len(basic_info) - len("<b>Torrent Details</b>:<br/>")
+        available_for_html = TELEGRAM_MESSAGE_SAFE_LENGTH - len("<b>Torrent Details</b>:<br/>")
         if len(html_content) > available_for_html:
             # Truncate HTML content
             html_content = html_content[:available_for_html - 50] + "<br/><i>...(детали обрезаны)</i>"
         torrent_section = f"<b>Torrent Details</b>:<br/>{html_content}"
+        message = torrent_section
     else:
         # Fallback to parsed torrent_details
         torrent_section = f"<b>Torrent Details</b>:<br/>"
@@ -391,8 +392,8 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         
         if len(movie_details.torrent_details) > max_details:
             torrent_section += f"<i>...(еще {len(movie_details.torrent_details) - max_details} деталей)</i><br/>"
-    
-    message = basic_info + torrent_section
+
+        message = basic_info + torrent_section
     
     # Final truncation check
     return _truncate_html_message(message)

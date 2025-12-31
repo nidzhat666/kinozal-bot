@@ -154,6 +154,13 @@ class VideoQuality(StrEnum):
                 return [
                     (["bdrip"], ["2160p", "4k", "uhd"]),
                     (["bd-rip"], ["2160p", "4k", "uhd"]),
+                    # Support for "UHD Blu-ray disc" and similar variants
+                    (["blu-ray"], ["2160p", "4k", "uhd"]),
+                    (["bluray"], ["2160p", "4k", "uhd"]),
+                    (["blu ray"], ["2160p", "4k", "uhd"]),
+                    # Support "UHD Blu-ray disc 2160p" pattern
+                    (["uhd", "blu-ray"], ["2160p", "4k"]),
+                    (["uhd", "bluray"], ["2160p", "4k"]),
                 ]
             case VideoQuality.UHD_4K:
                 return [
