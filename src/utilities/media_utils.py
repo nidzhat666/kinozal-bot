@@ -167,6 +167,8 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.HD_720P_BLURAY,
         VideoQuality.HD_720P_WEB,
         VideoQuality.HD_720P_BDRIP,
+        # Source-based with resolution (check before generic resolutions)
+        VideoQuality.WEBRIP,  # WEBRip with resolution (e.g., "WEBRip (1080p)")
         # Generic resolutions
         VideoQuality.UHD_4K,
         VideoQuality.FHD_1080P,
@@ -174,11 +176,10 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.HD_720P,
         VideoQuality.SD_576P,
         VideoQuality.SD_480P,
-        # Source-based fallbacks
+        # Source-based fallbacks (without resolution)
         VideoQuality.BDRIP,
         VideoQuality.HDRIP,
         VideoQuality.DVDRIP,
-        VideoQuality.WEBRIP,
     ]
     
     for quality in priority_order:

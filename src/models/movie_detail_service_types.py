@@ -204,6 +204,10 @@ class VideoQuality(StrEnum):
                 ]
             case VideoQuality.WEBRIP:
                 return [
+                    # Check for WEBRip with resolution (more specific)
+                    (["webrip"], ["1080p", "720p", "2160p", "4k"]),
+                    (["web-rip"], ["1080p", "720p", "2160p", "4k"]),
+                    # Fallback to WEBRip without resolution
                     (["webrip"], []),
                     (["web-rip"], []),
                     (["web-dlrip"], []),
