@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class VideoQuality(StrEnum):
     # 4K variants (highest quality first)
     UHD_4K_REMUX = "4K REMUX"
+    UHD_4K_WEB = "4K WEB-DL"
     UHD_4K_HDR_DV = "4K HDR DV"
     UHD_4K_HDR = "4K HDR"
     UHD_4K_BDRIP = "4K BDRip"
@@ -65,22 +66,22 @@ class VideoQuality(StrEnum):
     def rating_emoji(self) -> str:
         """Return quality rating emoji based on preference ranking.
         
-        🥇 - Gold: WEB-DL 1080p (best choice)
+        🥇 - Gold: 4K WEB-DL, WEB-DL 1080p (best choice)
         🥈 - Silver: BDRip 1080p, BluRay 1080p (great quality)
-        🥉 - Bronze: 4K WEB-DL/BDRip (optional, bigger size)
+        🥉 - Bronze: 4K BDRip (optional, bigger size)
         ⚠️ - Caution: REMUX (enthusiast only, huge size)
         ❌ - Avoid: HDRip, WEBRip, DVDRip, 720p, SD (outdated/bad quality)
         """
         match self:
-            # 🥇 Gold - WEB-DL 1080p
-            case VideoQuality.FHD_1080P_WEB:
+            # 🥇 Gold - 4K WEB-DL, WEB-DL 1080p
+            case VideoQuality.UHD_4K_WEB | VideoQuality.FHD_1080P_WEB:
                 return "🥇"
 
             # 🥈 Silver - BDRip 1080p
             case VideoQuality.FHD_1080P_BDRIP:
                 return "🥈"
 
-            # 🥉 Bronze - 4K variants (except REMUX)
+            # 🥉 Bronze - 4K variants (except REMUX and WEB-DL)
             case (
             VideoQuality.UHD_4K
             | VideoQuality.UHD_4K_HDR
@@ -127,6 +128,14 @@ class VideoQuality(StrEnum):
             case VideoQuality.UHD_4K_REMUX:
                 return [
                     (["remux"], ["2160p", "4k", "uhd"]),
+                ]
+            case VideoQuality.UHD_4K_WEB:
+                return [
+                    (["web-dl"], ["2160p", "4k", "uhd"]),
+                    (["webdl"], ["2160p", "4k", "uhd"]),
+                    (["2160p"], ["web-dl", "webdl"]),
+                    (["4k"], ["web-dl", "webdl"]),
+                    (["uhd"], ["web-dl", "webdl"]),
                 ]
             case VideoQuality.UHD_4K_HDR_DV:
                 return [

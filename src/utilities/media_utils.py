@@ -167,6 +167,7 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.FHD_1080P_REMUX,
         
         # WEB-DL/WEBRip variants (high priority)
+        VideoQuality.UHD_4K_WEB,  # 4K WEB-DL (highest priority among WEB-DL)
         VideoQuality.FHD_1080P_WEB,
         VideoQuality.HD_720P_WEB,
         VideoQuality.WEBRIP,  # WEBRip with or without resolution
