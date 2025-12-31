@@ -108,11 +108,21 @@ async def _get_search_text(
     """Get HTML content from Rutracker search page."""
     cookies = await _build_auth_cookies(credentials)
     url = get_url("/forum/tracker.php")
+    # Parameters in URL query string
     params = {"nm": query}
+    # Parameters in POST body (form data)
+    # f[]=-1: all forums, o=10: sort order, s=2: sort direction, pn=: page number (empty = first page)
+    data = {
+        "f[]": "-1",
+        "o": "10",
+        "s": "2",
+        "pn": "",
+        "nm": query,
+    }
 
     try:
         async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
-            response = await client.post(url, params=params)
+            response = await client.post(url, params=params, data=data)
             response.raise_for_status()
             # Rutracker typically uses cp1251 encoding
             return response.text
