@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 import bleach
 import httpx
@@ -133,6 +135,52 @@ async def _fetch_torrent_page(
         error_message = f"HTTP error while requesting {url}: {exc}"
         logger.error(error_message)
         raise RutrackerApiError(error_message) from exc
+
+
+async def _download_movie(
+    movie_id: int | str,
+    credentials: dict[str, str] | None = None,
+) -> DownloadResult:
+    """Download torrent file from Rutracker."""
+    logger.debug("Downloading Rutracker torrent for movie id %s", movie_id)
+    cookies = await _build_auth_cookies(credentials)
+    url = get_url(f"/forum/dl.php?t={movie_id}")
+
+    try:
+        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            
+            # Check if we got a torrent file (should start with 'd8:announce' for bencoded torrent)
+            # or if we got redirected to an error page
+            content_type = response.headers.get("content-type", "").lower()
+            if "text/html" in content_type:
+                # Likely an error page or login required
+                raise RutrackerApiError(
+                    f"Failed to download torrent {movie_id}: received HTML instead of torrent file. "
+                    "This may indicate authentication is required or the torrent is not available."
+                )
+            
+            payload = response.content
+    except httpx.HTTPError as exc:
+        error_message = (
+            f"HTTP error while downloading Rutracker movie {movie_id}: {exc}"
+        )
+        logger.error(error_message)
+        raise RutrackerApiError(error_message) from exc
+
+    # Validate that we got a torrent file
+    if not payload or len(payload) < 10:
+        raise RutrackerApiError(
+            f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
+        )
+
+    # Save torrent file to temporary directory
+    target = Path(tempfile.gettempdir()) / f"rutracker_{movie_id}.torrent"
+    target.write_bytes(payload)
+
+    logger.info("Torrent file for movie %s saved to %s", movie_id, target)
+    return DownloadResult(file_path=str(target), filename=target.name)
 
 
 def _remove_links_with_parents(soup: BeautifulSoup) -> None:
@@ -487,11 +535,5 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
             raise RutrackerApiError(error_message) from exc
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
-        """Download torrent file from Rutracker.
-        
-        TODO: Implement torrent file download from Rutracker.
-        """
-        raise NotImplementedError(
-            "Rutracker torrent download is not yet implemented. "
-            "Download functionality needs to be added."
-        )
+        """Download torrent file from Rutracker."""
+        return await _download_movie(movie_id, self._credentials)
