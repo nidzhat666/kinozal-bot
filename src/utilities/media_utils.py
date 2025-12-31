@@ -222,9 +222,11 @@ def extract_season_number(title: str) -> int | None:
 
     # Patterns: "season X", "сезон X", "сезон: X", "X сезон", "sX"
     # Rutracker often uses "Сезон: 2" format with colon
+    # Order matters: more specific patterns first to avoid false matches
+    # (e.g., "4 сезон: 1-10" should match "4", not "1")
     patterns = [
+        r"(\d+)\s*сезон",  # "4 сезон" - check this first to avoid matching episode numbers
         r"(?:season|сезон)\s*:?\s*(\d+)",  # "season 2", "сезон 2", "сезон: 2"
-        r"(\d+)\s*сезон",
         r"\bs(\d+)",
     ]
 
