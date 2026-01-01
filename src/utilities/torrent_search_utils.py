@@ -233,29 +233,45 @@ def _is_audio_release(result_name: str) -> bool:
     """
     result_lower = result_name.lower()
     
-    # Hard filters - always skip if these appear
-    hard_audio_keywords = [
+    # Strictly audio releases - rarely/never used for video
+    strict_audio_keywords = [
         "audio pack",
         "[audio pack]",
-        "аудиодорож",
-        "озвучк",
         "soundtrack",
         "ost",
+        "score",
+        "саундтрек",
+    ]
+    
+    # Conditional filters - skip only if NO video markers are found
+    # These might appear in video titles (e.g. "BDRip 1080p FLAC", "MVO озвучка")
+    conditional_audio_keywords = [
+        "аудиодорож",
+        "озвучк",
         "mp3",
         "flac",
-        "score",
         "albums",
         "album",
         "tracks",
         "track",
         "lossless",
         "аудио",
-        "саундтрек",
         "музыка",
     ]
     
-    # Check hard filters first
-    for keyword in hard_audio_keywords:
+    # Check strict filters first
+    for keyword in strict_audio_keywords:
+        if keyword in result_lower:
+            return True
+            
+    # Check if it has video markers
+    # If it has video markers, it's likely NOT an audio release (even if it mentions FLAC/MP3)
+    has_video = _has_video_markers(result_name)
+    if has_video:
+        return False
+    
+    # If no video markers, check conditional keywords
+    for keyword in conditional_audio_keywords:
         if keyword in result_lower:
             return True
     
@@ -265,17 +281,10 @@ def _is_audio_release(result_name: str) -> bool:
     
     if has_audio_codec:
         # Check if there are video markers - if not, it's likely audio-only
-        video_markers = [
-            "1080p", "2160p", "720p", "480p", "576p",
-            "bdrip", "bd-rip", "bluray", "blu-ray",
-            "web-dl", "webdl", "webrip", "web-rip",
-            "hdrip", "hd-rip", "dvdrip", "dvd-rip",
-            "remux", "uhd", "4k", "hdr", "hevc", "x265", "x264",
-        ]
-        has_video_marker = any(marker in result_lower for marker in video_markers)
-        
-        if not has_video_marker:
-            return True
+        # (This check is redundant since we already checked _has_video_markers above, 
+        # but kept for logic consistency with original code structure if needed, 
+        # though simplified here since we already returned False if has_video)
+        return True
     
     return False
 
