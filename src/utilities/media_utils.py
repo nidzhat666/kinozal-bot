@@ -206,10 +206,19 @@ def parse_video_quality(name: str) -> str | None:
             continue
         
         if _matches_quality_rules(name_lower, quality.match_rules):
+            # Log when quality is mapped to generic "4K" or "1080p" without source specification
+            # This helps identify cases where mapping might be incorrect
+            if quality in (VideoQuality.UHD_4K, VideoQuality.FHD_1080P):
+                op_logger = logger.bind(component="utility", operation="parse_quality")
+                op_logger.warning(
+                    "Generic quality detected (no source specification)",
+                    quality=quality.value,
+                    torrent_name=name,
+                )
             return quality
     
-    logger.bind(component="utility", operation="parse_quality")
-    logger.warning("Unknown video quality in torrent name", name=name)
+    op_logger = logger.bind(component="utility", operation="parse_quality")
+    op_logger.warning("Unknown video quality in torrent name", name=name)
     return None
 
 
