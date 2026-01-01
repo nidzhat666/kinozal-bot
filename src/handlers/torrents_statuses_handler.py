@@ -41,7 +41,12 @@ async def get_torrents() -> list:
             torrents = await torrents_info(qbt_client, sort="added_on", reverse=True)
             return list(reversed(torrents[:MAX_TORRENTS_DISPLAY]))
     except Exception as e:
-        logger.error("Error in getting torrents: %s", e, exc_info=True)
+        logger.error(
+            "Error in getting torrents",
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         return []
 
 

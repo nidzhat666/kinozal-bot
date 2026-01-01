@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import logging
-
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -20,16 +18,18 @@ from models.search_provider_types import MediaDetails, MediaItem
 from services.exceptions import KinopoiskApiError, NoResultsFoundError, TmdbApiError
 from services.search_integrations.registry import get_search_provider
 from utilities.handlers_utils import redis_callback_get, redis_callback_save
+from utilities.logger_utils import get_logger
 from utilities.torrent_search_utils import format_torrent_search_results
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def show_media_results(
     query: str,
     message: Message,
 ) -> None:
-    logger.info("Searching for query '%s'", query)
+    op_logger = logger.bind(component="utility", operation="media_search")
+    op_logger.info("Searching for query", query=query)
     search_provider = get_search_provider()
     search_response = await search_provider.search(query)
     movies = search_response.results
@@ -171,9 +171,10 @@ async def get_details_from_callback(
         return await search_provider.get_details(movie_id)
     except (KinopoiskApiError, TmdbApiError) as exc:
         logger.warning(
-            "Failed to fetch details for id %s: %s. Falling back to cached data.",
-            movie_id,
-            exc,
+            "Failed to fetch details, falling back to cached data",
+            movie_id=movie_id,
+            error_type=type(exc).__name__,
+            error_message=str(exc),
         )
         payload = movie_payload or movie_details_payload
         if payload:
@@ -219,5 +220,10 @@ async def show_cached_torrent_results(
         await message.edit_text(message_text, reply_markup=keyboard)
         return True
     except Exception as e:
-        logger.error(f"Failed to show cached results: {e}", exc_info=True)
+        logger.error(
+            "Failed to show cached results",
+            error_type=type(e).__name__,
+            error_message=str(e),
+            exc_info=True,
+        )
         return False

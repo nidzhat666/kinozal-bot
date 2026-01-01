@@ -6,6 +6,7 @@ from aiogram.enums.parse_mode import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.text_decorations import html_decoration
+from bs4 import BeautifulSoup
 from sulguk import SULGUK_PARSE_MODE
 
 from bot.config import QBT_CREDENTIALS
@@ -45,20 +46,20 @@ async def handle_movie_selection(callback_query: CallbackQuery):
             if result.provider_name:
                 provider_name = result.provider_name
                 logger.debug(
-                    "Extracted provider_name '%s' from cached movie_details for movie ID: %s",
-                    provider_name,
-                    movie_id
+                    "Extracted provider_name from cached movie_details",
+                    provider_name=provider_name,
+                    movie_id=movie_id,
                 )
         except Exception as exc:
             logger.debug(
-                "Could not extract provider_name from cached movie_details: %s",
-                exc
+                "Could not extract provider_name from cached movie_details",
+                error=str(exc),
             )
     
     logger.info(
-        "Movie selected with ID: %s, provider: %s",
-        movie_id,
-        provider_name or "default"
+        "Movie selected",
+        movie_id=movie_id,
+        provider=provider_name or "default",
     )
 
     try:
@@ -69,9 +70,9 @@ async def handle_movie_selection(callback_query: CallbackQuery):
             if movie_details.provider_name:
                 provider_name = movie_details.provider_name
                 logger.debug(
-                    "Extracted provider_name '%s' from movie_details for movie ID: %s",
-                    provider_name,
-                    movie_id
+                    "Extracted provider_name from movie_details",
+                    provider_name=provider_name,
+                    movie_id=movie_id,
                 )
         
         # Final check: provider_name is required
@@ -95,11 +96,20 @@ async def handle_movie_selection(callback_query: CallbackQuery):
         )
     except ValueError as e:
         # Handle explicit errors about missing provider
-        logger.error(f"Provider error for movie ID {movie_id}: {e}", exc_info=True)
+        logger.error(
+            "Provider error for movie",
+            movie_id=movie_id,
+            error=str(e),
+            exc_info=True,
+        )
         await callback_query.message.answer(str(e))
         await callback_query.answer()
     except Exception as e:
-        logger.error(f"Error in fetching movie details: {e}", exc_info=True)
+        logger.error(
+            "Error in fetching movie details",
+            error=str(e),
+            exc_info=True,
+        )
         await callback_query.message.answer("Не удалось получить детали фильма.")
         await callback_query.answer()
 
@@ -116,42 +126,42 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
             if result.provider_name:
                 provider_name = result.provider_name
                 logger.debug(
-                    "Using provider_name '%s' from cached movie_details for movie ID: %s",
-                    provider_name,
-                    movie_id
+                    "Using provider_name from cached movie_details",
+                    provider_name=provider_name,
+                    movie_id=movie_id,
                 )
             elif provider_name:
                 logger.debug(
-                    "Using provider_name '%s' from callback_data for movie ID: %s",
-                    provider_name,
-                    movie_id
+                    "Using provider_name from callback_data",
+                    provider_name=provider_name,
+                    movie_id=movie_id,
                 )
             else:
                 logger.warning(
-                    "No provider_name found in callback_data or cached movie_details for movie ID: %s",
-                    movie_id
+                    "No provider_name found in callback_data or cached movie_details",
+                    movie_id=movie_id,
                 )
             
             # Only use cached data if it has full details
             # Otherwise, fetch full details from provider
             if result.has_full_details:
                 logger.info(
-                    "Using cached full movie details for movie ID: %s (provider: %s)",
-                    movie_id,
-                    provider_name or "unknown"
+                    "Using cached full movie details",
+                    movie_id=movie_id,
+                    provider=provider_name or "unknown",
                 )
                 return result
             else:
                 logger.info(
-                    "Cached movie details for ID %s are incomplete (has_full_details=False), fetching full details from provider: %s",
-                    movie_id,
-                    provider_name or "default"
+                    "Cached movie details are incomplete, fetching full details",
+                    movie_id=movie_id,
+                    provider=provider_name or "default",
                 )
         except ValidationError as exc:
             logger.warning(
-                "Failed to use cached movie details for ID %s: %s. Refetching.",
-                movie_id,
-                exc,
+                "Failed to use cached movie details, refetching",
+                movie_id=movie_id,
+                error=str(exc),
             )
     
     # Get provider by name - REQUIRED, no default
@@ -164,9 +174,9 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
     try:
         provider = get_torrent_provider(provider_name)
         logger.info(
-            "Using provider '%s' for movie ID: %s",
-            provider_name,
-            movie_id
+            "Using provider",
+            provider=provider_name,
+            movie_id=movie_id,
         )
     except KeyError as e:
         raise ValueError(
@@ -174,7 +184,11 @@ async def _get_movie_details(callback_data: dict, movie_id: str) -> MovieDetails
             f"Available providers: {', '.join(get_registered_providers())}"
         ) from e
     
-    logger.info("Fetching movie details for movie ID: %s from provider: %s", movie_id, provider.name)
+    logger.info(
+        "Fetching movie details",
+        movie_id=movie_id,
+        provider=provider.name,
+    )
     return await provider.get_movie_detail(movie_id)
 
 
@@ -193,16 +207,20 @@ async def send_movie_details(
     message_length = len(message_caption)
     if message_length > TELEGRAM_MESSAGE_SAFE_LENGTH:
         logger.warning(
-            "Movie details message is long (%d chars), may be truncated",
-            message_length
+            "Movie details message is long, may be truncated",
+            length=message_length
         )
-    logger.debug(f"Sending movie details ({message_length} chars): {message_caption[:200]}...")
+    logger.debug(
+        "Sending movie details",
+        length=message_length,
+        content_preview=message_caption[:200]
+    )
 
     # Fallback: if tmdb_info is missing, create from torrent provider movie details
     if not tmdb_info:
         logger.info("No tmdb_info provided, using torrent provider movie details as fallback")
         tmdb_info = _create_fallback_tmdb_info(movie_details)
-        logger.info("Fallback tmdb_info: %s", tmdb_info)
+        logger.info("Fallback tmdb_info", tmdb_info=tmdb_info)
 
     qbt_client = await get_client(**QBT_CREDENTIALS)
     async with qbt_client:
@@ -221,13 +239,13 @@ async def send_movie_details(
         await callback_query.message.edit_text(
             message_caption, parse_mode=SULGUK_PARSE_MODE, reply_markup=reply_markup
         )
-    except TelegramBadRequest as e:
+    except (TelegramBadRequest, ValueError) as e:
         # Handle message too long error
         if "MESSAGE_TOO_LONG" in str(e) or "message is too long" in str(e).lower():
             logger.error(
-                "Message too long (%d chars) for movie ID %s, sending truncated version",
-                len(message_caption),
-                movie_id,
+                "Message too long, sending truncated version",
+                length=len(message_caption),
+                movie_id=movie_id,
                 exc_info=True
             )
             # Try sending a minimal version
@@ -242,9 +260,42 @@ async def send_movie_details(
                     minimal_message, parse_mode=SULGUK_PARSE_MODE, reply_markup=reply_markup
                 )
             except Exception as e2:
-                logger.error("Failed to send minimal message: %s", e2, exc_info=True)
+                logger.error(
+                    "Failed to send minimal message",
+                    error=str(e2),
+                    exc_info=True,
+                )
                 await callback_query.message.answer(
                     "Информация о торренте слишком длинная для отображения. "
+                    "Используйте кнопку для просмотра на трекере."
+                )
+        elif "Unsupported tag" in str(e) or isinstance(e, ValueError):
+            # Handle HTML parsing errors from sulguk
+            logger.error(
+                "HTML parsing error, sending simplified version",
+                movie_id=movie_id,
+                error=str(e),
+                exc_info=True,
+            )
+            # Try sending a simplified version without HTML content
+            simplified_message = (
+                f"<b>{movie_details.name}</b> ({movie_details.year})<br/>"
+                f"<b>Качество</b>: {movie_details.video_quality or 'N/A'}<br/>"
+                f"<i>Детальная информация содержит некорректный HTML.</i><br/>"
+                f"<i>Используйте кнопку ниже для просмотра на трекере.</i>"
+            )
+            try:
+                await callback_query.message.edit_text(
+                    simplified_message, parse_mode=SULGUK_PARSE_MODE, reply_markup=reply_markup
+                )
+            except Exception as e2:
+                logger.error(
+                    "Failed to send simplified message",
+                    error=str(e2),
+                    exc_info=True,
+                )
+                await callback_query.message.answer(
+                    "Ошибка при форматировании информации о торренте. "
                     "Используйте кнопку для просмотра на трекере."
                 )
         else:
@@ -320,6 +371,60 @@ TELEGRAM_MESSAGE_MAX_LENGTH = 4096
 TELEGRAM_MESSAGE_SAFE_LENGTH = 4000
 
 
+def _truncate_html_safely(html: str, max_length: int) -> str:
+    """Truncate HTML at safe boundaries to prevent cutting through tags.
+    
+    This prevents cutting through HTML tags which would create malformed HTML
+    that sulguk cannot parse.
+    """
+    if len(html) <= max_length:
+        return html
+    
+    try:
+        # Parse HTML to find safe truncation point
+        soup = BeautifulSoup(html, "html.parser")
+        
+        # Simple approach: find the last complete tag before max_length
+        truncated = html[:max_length]
+        
+        # Look backwards for a closing tag or self-closing tag
+        last_tag_end = -1
+        search_start = max(0, max_length - 200)  # Search in last 200 chars
+        
+        for i in range(max_length - 1, search_start, -1):
+            if html[i] == '>':
+                # Found a tag end, check if it's complete
+                tag_start = html.rfind('<', search_start, i + 1)
+                if tag_start != -1:
+                    tag_content = html[tag_start + 1:i]
+                    # Check if it's a closing tag (starts with /) or self-closing (ends with /)
+                    if tag_content.strip().startswith('/') or tag_content.strip().endswith('/'):
+                        last_tag_end = i + 1
+                        break
+                    # Or if it's a simple tag like <br>, <hr>, etc.
+                    elif tag_content.strip() in ['br', 'hr', 'img', 'input', 'wbr']:
+                        last_tag_end = i + 1
+                        break
+        
+        if last_tag_end > 0:
+            return html[:last_tag_end]
+        else:
+            # Fallback: try to find any '>' character
+            last_gt = truncated.rfind('>')
+            if last_gt > max_length - 100:
+                return html[:last_gt + 1]
+            else:
+                # Last resort: just truncate (might create invalid HTML, but better than nothing)
+                return truncated
+    except Exception:
+        # If parsing fails, use simple fallback
+        truncated = html[:max_length]
+        last_gt = truncated.rfind('>')
+        if last_gt > max_length - 100:
+            return html[:last_gt + 1]
+        return truncated
+
+
 def _truncate_html_message(message: str, max_length: int = TELEGRAM_MESSAGE_SAFE_LENGTH) -> str:
     """Truncate HTML message to fit Telegram's message length limit.
     
@@ -329,12 +434,7 @@ def _truncate_html_message(message: str, max_length: int = TELEGRAM_MESSAGE_SAFE
         return message
     
     # Try to find a good truncation point (at word boundary, before <br/>)
-    truncated = message[:max_length]
-    
-    # Find last <br/> tag before truncation point
-    last_br = truncated.rfind("<br/>")
-    if last_br > max_length - 100:  # If <br/> is close to the end, use it
-        truncated = message[:last_br + 5]  # Include <br/>
+    truncated = _truncate_html_safely(message, max_length - len("<br/><i>...(сообщение обрезано)</i>"))
     
     # Add truncation indicator
     truncated += "<br/><i>...(сообщение обрезано)</i>"
@@ -343,7 +443,7 @@ def _truncate_html_message(message: str, max_length: int = TELEGRAM_MESSAGE_SAFE
     if len(truncated) > TELEGRAM_MESSAGE_MAX_LENGTH:
         # More aggressive truncation
         available = TELEGRAM_MESSAGE_MAX_LENGTH - len("<br/><i>...(сообщение обрезано)</i>")
-        truncated = message[:available] + "<br/><i>...(сообщение обрезано)</i>"
+        truncated = _truncate_html_safely(message, available) + "<br/><i>...(сообщение обрезано)</i>"
     
     return truncated
 
@@ -374,10 +474,12 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         # If HTML content is available, use it but limit its length
         html_content = movie_details.torrent_html_content
         # Reserve space for basic info and section header
-        available_for_html = TELEGRAM_MESSAGE_SAFE_LENGTH - len("<b>Torrent Details</b>:<br/>")
+        truncation_indicator = "<br/><i>...(детали обрезаны)</i>"
+        available_for_html = TELEGRAM_MESSAGE_SAFE_LENGTH - len("<b>Torrent Details</b>:<br/>") - len(truncation_indicator)
         if len(html_content) > available_for_html:
-            # Truncate HTML content
-            html_content = html_content[:available_for_html - 50] + "<br/><i>...(детали обрезаны)</i>"
+            # Truncate HTML content at safe boundaries
+            html_content = _truncate_html_safely(html_content, available_for_html)
+            html_content += truncation_indicator
         torrent_section = f"<b>Torrent Details</b>:<br/>{html_content}"
         message = torrent_section
     else:

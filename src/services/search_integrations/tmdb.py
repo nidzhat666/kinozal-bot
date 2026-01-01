@@ -42,7 +42,13 @@ class TmdbService(SearchProvider):
             response = TmdbSearchResponse.model_validate(payload)
         except Exception as exc:
             message = "Failed to parse TMDB search response."
-            logger.error("%s Raw payload: %s", message, payload, exc_info=True)
+            logger.error(
+                "Failed to parse TMDB search response",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                raw_payload=payload,
+                exc_info=True,
+            )
             raise TmdbApiError(message) from exc
 
         return self._to_search_results(response)
@@ -65,7 +71,14 @@ class TmdbService(SearchProvider):
             details = parser.model_validate(payload)
         except Exception as exc:
             message = f"Failed to parse TMDB details for {media_id}."
-            logger.error("%s Raw payload: %s", message, payload, exc_info=True)
+            logger.error(
+                "Failed to parse TMDB details",
+                media_id=media_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                raw_payload=payload,
+                exc_info=True,
+            )
             raise TmdbApiError(message) from exc
 
         return self._to_media_details(details)

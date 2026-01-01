@@ -53,7 +53,13 @@ class KinopoiskService(SearchProvider):
             response = KinopoiskSearchResponse.model_validate(payload)
         except Exception as exc:
             message = "Failed to parse Kinopoisk search response."
-            logger.error("%s Raw payload: %s", message, payload, exc_info=True)
+            logger.error(
+                "Failed to parse Kinopoisk search response",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                raw_payload=payload,
+                exc_info=True,
+            )
             raise KinopoiskApiError(message) from exc
 
         return self._to_search_results(response)
@@ -64,7 +70,14 @@ class KinopoiskService(SearchProvider):
             details = KinopoiskMovieDetails.model_validate(payload)
         except Exception as exc:
             message = f"Failed to parse Kinopoisk movie details for id {media_id}."
-            logger.error("%s Raw payload: %s", message, payload, exc_info=True)
+            logger.error(
+                "Failed to parse Kinopoisk movie details",
+                media_id=media_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                raw_payload=payload,
+                exc_info=True,
+            )
             raise KinopoiskApiError(message) from exc
 
         seasons = await self._get_seasons(media_id)
@@ -82,7 +95,14 @@ class KinopoiskService(SearchProvider):
             response = KinopoiskSeasonListResponse.model_validate(payload)
         except Exception as exc:
             message = f"Failed to parse Kinopoisk seasons for movie id {movie_id}."
-            logger.error("%s Raw payload: %s", message, payload, exc_info=True)
+            logger.error(
+                "Failed to parse Kinopoisk seasons",
+                movie_id=movie_id,
+                error=str(exc),
+                error_type=type(exc).__name__,
+                raw_payload=payload,
+                exc_info=True,
+            )
             raise KinopoiskApiError(message) from exc
         return response.docs
 

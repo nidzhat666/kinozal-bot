@@ -2,6 +2,10 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+# Initialize logging configuration FIRST
+from bot.logger_config import setup_logging
+setup_logging()
+
 import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand, Update
@@ -15,7 +19,6 @@ from bot.config import (
     USE_POLLING,
 )
 from bot.constants import REFRESH_PLEX_COMMAND, STATUS_COMMAND
-from bot.logger_config import setup_logging
 from handlers import (
     search_handler,
     movie_download_handler,
@@ -27,8 +30,6 @@ from handlers import (
     refresh_plex_handler,
 )
 
-# Initialize logging configuration
-setup_logging()
 logger = structlog.get_logger(__name__)
 
 # Initialize Bot and Dispatcher

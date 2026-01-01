@@ -46,7 +46,7 @@ async def add_torrent_and_rename(
         season,
     )
     torrent_name = get_torrent_name(original_title or "", year, quality, season)
-    logger.info("Generated torrent name: '%s'", torrent_name)
+    logger.info("Generated torrent name", torrent_name=torrent_name)
     async with client:
         before_hashes = await _get_torrent_hashes(client)
 
