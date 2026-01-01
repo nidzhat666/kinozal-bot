@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import logging
 import re
 from difflib import SequenceMatcher
 
 from models.search_provider_types import MediaDetails
 from models.movie_detail_service_types import VideoQuality
+from utilities.logger_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 MAX_QUERY_LENGTH = 64
 
@@ -208,7 +208,8 @@ def parse_video_quality(name: str) -> str | None:
         if _matches_quality_rules(name_lower, quality.match_rules):
             return quality
     
-    logger.warning("Unknown video quality in torrent name: %s", name)
+    logger.bind(component="utility", operation="parse_quality")
+    logger.warning("Unknown video quality in torrent name", name=name)
     return None
 
 

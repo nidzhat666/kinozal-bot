@@ -1,8 +1,8 @@
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand, Update
 from fastapi import FastAPI, Request
@@ -29,7 +29,7 @@ from handlers import (
 
 # Initialize logging configuration
 setup_logging()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Initialize Bot and Dispatcher
 bot = Bot(token=TELEGRAM_BOT_TOKEN)

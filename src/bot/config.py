@@ -50,5 +50,9 @@ USE_POLLING = os.getenv("USE_POLLING", "False").lower() in ("true", "1", "yes")
 USE_KINOZAL = os.getenv("USE_KINOZAL", "1").lower() in ("true", "1", "yes")
 USE_RUTRACKER = os.getenv("USE_RUTRACKER", "1").lower() in ("true", "1", "yes")
 
+LOG_FORMAT = os.getenv("LOG_FORMAT", "json").lower()  # json or console
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_DEV_MODE = os.getenv("LOG_DEV_MODE", "False").lower() in ("true", "1", "yes")
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

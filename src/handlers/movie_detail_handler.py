@@ -1,4 +1,4 @@
-import logging
+
 import re
 
 from aiogram import Router
@@ -22,7 +22,8 @@ from utilities.handlers_utils import check_action
 from utilities.media_utils import parse_video_quality
 from pydantic import ValidationError
 
-logger = logging.getLogger(__name__)
+from utilities.logger_utils import get_handler_logger
+logger = get_handler_logger(__name__.split(".")[-1])
 router = Router(name=__name__)
 
 

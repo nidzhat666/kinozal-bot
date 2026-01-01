@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,9 +19,9 @@ from services.exceptions import KinozalApiError
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities import kinozal_utils
 from utilities.kinozal_utils import get_url
+from utilities.logger_utils import get_provider_logger
 
-
-logger = logging.getLogger(__name__)
+PROVIDER_NAME = "kinozal"
 
 
 @dataclass(slots=True)
@@ -41,40 +40,60 @@ async def _search_movies(
     requested_type: str | None = None,
 ) -> list[MovieSearchResult]:
     started_at = perf_counter()
-    provider_name = "kinozal"
-    logger.debug(
-        "[%s] Starting search for query '%s' (requested_item=%s, requested_type=%s)",
-        provider_name,
-        query,
-        requested_item,
-        requested_type,
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="search_start")
+    logger.info(
+        "Search started",
+        query=query,
+        requested_item=requested_item,
+        requested_type=requested_type,
     )
 
     raw_items = await _fetch_search_items(query)
     if not raw_items:
-        logger.info("[%s] No raw search results found for query '%s'", provider_name, query)
-        _log_search_duration(query, 0, started_at, provider_name)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        logger = logger.bind(operation="search_no_results")
+        logger.info("Search no results", query=query, duration_ms=duration_ms)
         return []
 
-    logger.info("[%s] Found %d raw search results for query '%s'", provider_name, len(raw_items), query)
+    logger = logger.bind(operation="search_raw_results")
+    logger.info("Search raw results found", query=query, count=len(raw_items))
 
     movies: list[MovieSearchResult] = []
+    count_before = len(raw_items)
 
     for item in raw_items:
         try:
             result = _build_movie_search_result(item)
+            movies.append(result)
         except Exception as exc:
+            error_type = type(exc).__name__
+            logger = logger.bind(operation="parse_error")
             logger.error(
-                "[%s] Failed to enrich search result for id %s: %s",
-                provider_name,
-                item.movie_id,
-                exc,
+                "Failed to enrich search result",
+                item_id=item.movie_id,
+                error_type=error_type,
+                error_message=str(exc),
+                exc_info=True,
             )
             continue
-        movies.append(result)
 
-    logger.info("[%s] Successfully processed %d results for query '%s'", provider_name, len(movies), query)
-    _log_search_duration(query, len(movies), started_at, provider_name)
+    count_after = len(movies)
+    logger = logger.bind(operation="search_processing")
+    logger.info(
+        "Search processing completed",
+        query=query,
+        count_before=count_before,
+        count_after=count_after,
+    )
+
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    logger = logger.bind(operation="search_completed")
+    logger.info(
+        "Search completed",
+        query=query,
+        count=count_after,
+        duration_ms=duration_ms,
+    )
     return movies
 
 
@@ -100,25 +119,55 @@ def _build_movie_search_result(
 
 
 async def _fetch_movie_details(movie_id: int | str) -> MovieDetails:
-    logger.debug("[kinozal] Fetching movie details for id %s", movie_id)
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="fetch_details")
+    logger.debug("Fetching movie details", movie_id=str(movie_id))
     html = await _get_text("/details.php", params={"id": movie_id})
-    return _parse_movie_details(html)
+    return _parse_movie_details(html, movie_id)
 
 
 async def _get_text(path: str, *, params: dict[str, str | int] | None = None) -> str:
     url = get_url(path)
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
+    start_time = perf_counter()
+    
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, params=params)
-            logger.debug("[kinozal] GET %s -> %s", response.url, response.status_code)
+            duration_ms = int((perf_counter() - start_time) * 1000)
+            logger.info(
+                "HTTP request",
+                method="GET",
+                url=str(response.url),
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+            )
             if response.status_code != 200:
-                raise KinozalApiError(
-                    f"Kinozal request to {response.url} failed with status {response.status_code}."
+                error_type = "HTTPError"
+                error_message = f"Kinozal request to {response.url} failed with status {response.status_code}."
+                logger = logger.bind(operation="http_error")
+                logger.error(
+                    "HTTP error",
+                    method="GET",
+                    url=str(response.url),
+                    error_type=error_type,
+                    error_message=error_message,
                 )
+                raise KinozalApiError(error_message)
             return response.text
     except httpx.HTTPError as exc:
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        error_type = type(exc).__name__
         error_message = f"HTTP client error while requesting {url}: {exc}"
-        logger.error("[kinozal] %s", error_message)
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="GET",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
+            exc_info=True,
+        )
         raise KinozalApiError(error_message) from exc
 
 
@@ -156,11 +205,13 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
             )
         )
 
-    logger.debug("[kinozal] Parsed %d search results", len(results))
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_results")
+    logger.debug("Parsed search results", count=len(results))
     return results
 
 
-def _parse_movie_details(html: str) -> MovieDetails:
+def _parse_movie_details(html: str, movie_id: int | str) -> MovieDetails:
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_details")
     try:
         soup = BeautifulSoup(html, "html.parser")
         return MovieDetails(
@@ -174,8 +225,16 @@ def _parse_movie_details(html: str) -> MovieDetails:
             torrent_details=_parse_torrent_details(soup),
         )
     except Exception as exc:  # noqa: BLE001
+        error_type = type(exc).__name__
         error_message = f"Error parsing Kinozal movie detail results: {exc}"
-        logger.error("[kinozal] %s", error_message)
+        logger = logger.bind(operation="parse_error")
+        logger.error(
+            "Parse error",
+            item_id=str(movie_id),
+            error_type=error_type,
+            error_message=error_message,
+            exc_info=True,
+        )
         raise KinozalApiError(error_message) from exc
 
 
@@ -289,133 +348,188 @@ def _extract_span_text(soup: BeautifulSoup, label: str) -> str:
     return sibling.strip() if isinstance(sibling, str) else ""
 
 
-def _log_search_duration(
-    query: str,
-    result_count: int,
-    started_at: float,
-    provider_name: str = "kinozal",
-) -> None:
-    duration = perf_counter() - started_at
-    logger.info(
-        "[%s] Search completed for query '%s' with %d results in %.2fs",
-        provider_name,
-        query,
-        result_count,
-        duration,
-    )
 
 
 async def _download_movie(
     movie_id: int | str,
     credentials: dict[str, str],
 ) -> DownloadResult:
-    logger.debug("[kinozal] Downloading torrent for movie id %s", movie_id)
+    started_at = perf_counter()
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
+    logger.info("Download started", movie_id=str(movie_id))
+    
     cookies = await _authenticate(credentials)
     url = get_url(f"/download.php?id={movie_id}")
 
     try:
+        http_start = perf_counter()
         async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
             response = await client.get(url)
-            logger.debug("[kinozal] GET %s -> %s", response.url, response.status_code)
+            http_duration_ms = int((perf_counter() - http_start) * 1000)
+            logger = logger.bind(operation="http_request")
+            logger.info(
+                "HTTP request",
+                method="GET",
+                url=str(response.url),
+                status_code=response.status_code,
+                duration_ms=http_duration_ms,
+            )
             if response.status_code != 200:
-                raise KinozalApiError(
-                    f"Failed to download movie {movie_id}: HTTP {response.status_code}."
+                error_type = "HTTPError"
+                error_message = f"Failed to download movie {movie_id}: HTTP {response.status_code}."
+                logger = logger.bind(operation="http_error")
+                logger.error(
+                    "HTTP error",
+                    method="GET",
+                    url=str(response.url),
+                    error_type=error_type,
+                    error_message=error_message,
                 )
+                raise KinozalApiError(error_message)
             payload = response.content
     except httpx.HTTPError as exc:
-        error_message = (
-            f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
+        http_duration_ms = int((perf_counter() - http_start) * 1000)
+        error_type = type(exc).__name__
+        error_message = f"HTTP client error while downloading Kinozal movie {movie_id}: {exc}"
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="GET",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=http_duration_ms,
+            exc_info=True,
         )
-        logger.error("[kinozal] %s", error_message)
         raise KinozalApiError(error_message) from exc
 
     if b"pay.php" in payload:
-        raise KinozalApiError("You are not allowed to download this torrent.")
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = "DownloadError"
+        error_message = "You are not allowed to download this torrent."
+        logger = logger.bind(operation="download_error")
+        logger.error(
+            "Download error",
+            movie_id=str(movie_id),
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
+        )
+        raise KinozalApiError(error_message)
 
     target = Path(tempfile.gettempdir()) / f"{movie_id}.torrent"
     async with aiofile.async_open(target, "wb") as file_handle:
         await file_handle.write(payload)
 
-    logger.info("[kinozal] Torrent file for movie %s saved to %s", movie_id, target)
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    file_size = len(payload)
+    logger = logger.bind(operation="download_success")
+    logger.info(
+        "Download success",
+        movie_id=str(movie_id),
+        file_path=str(target),
+        file_size=file_size,
+        duration_ms=duration_ms,
+    )
     return DownloadResult(file_path=str(target), filename=target.name)
 
 
 async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+    started_at = perf_counter()
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_start")
+    logger.info("Authentication started")
+    
     username = credentials.get("username")
     password = credentials.get("password")
     if not username or not password:
-        raise KinozalApiError(
-            "Kinozal download requires username and password credentials."
+        error_type = "AuthenticationError"
+        error_message = "Kinozal download requires username and password credentials."
+        logger = logger.bind(operation="auth_failed")
+        logger.error(
+            "Authentication failed",
+            error_type=error_type,
+            error_message=error_message,
         )
+        raise KinozalApiError(error_message)
 
     url = kinozal_utils.get_url("/takelogin.php")
     data = {"username": username, "password": password}
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     try:
+        http_start = perf_counter()
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.post(url, data=data, headers=headers)
-            logger.debug(
-                "[kinozal] POST %s -> %s (final URL: %s)",
-                url,
-                response.status_code,
-                response.url,
+            http_duration_ms = int((perf_counter() - http_start) * 1000)
+            logger = logger.bind(operation="http_request")
+            logger.info(
+                "HTTP request",
+                method="POST",
+                url=url,
+                status_code=response.status_code,
+                duration_ms=http_duration_ms,
             )
             if response.status_code != 200:
-                raise KinozalApiError(
-                    f"Kinozal authentication failed with status {response.status_code}."
+                error_type = "HTTPError"
+                error_message = f"Kinozal authentication failed with status {response.status_code}."
+                logger = logger.bind(operation="http_error")
+                logger.error(
+                    "HTTP error",
+                    method="POST",
+                    url=url,
+                    error_type=error_type,
+                    error_message=error_message,
                 )
-            # Check if we were redirected (successful login usually redirects)
-            was_redirected = str(response.url) != url
-            logger.debug(
-                "[kinozal] Authentication redirect: %s (login URL: %s, final URL: %s)",
-                was_redirected,
-                url,
-                response.url,
-            )
+                raise KinozalApiError(error_message)
+            
             # Extract cookies from response and client cookie jar
-            # httpx automatically handles cookies across redirects when follow_redirects=True
             cookies = {}
-            # First, get cookies from response (should include cookies from redirect chain)
             for cookie_name, cookie_value in response.cookies.items():
                 cookies[cookie_name] = cookie_value
-            # Also check client's cookies (cookies are stored in client's cookie jar after redirects)
-            # client.cookies is a Cookies object that behaves like a dict
             try:
-                # Try to get cookies from client's cookie jar
                 client_cookies = dict(client.cookies)
                 cookies.update(client_cookies)
             except (AttributeError, TypeError, ValueError):
-                # If client.cookies is not accessible as dict, try alternative methods
                 try:
-                    # Try accessing cookies directly
                     if hasattr(client.cookies, 'jar'):
                         for cookie in client.cookies.jar:
                             cookies[cookie.name] = cookie.value
                 except (AttributeError, TypeError):
                     pass
-
-            logger.debug(
-                "[kinozal] Authentication response cookies: %s (from response: %s)",
-                list(cookies.keys()) if cookies else "none",
-                list(response.cookies.keys()) if response.cookies else "none",
-            )
     except httpx.HTTPError as exc:
+        http_duration_ms = int((perf_counter() - http_start) * 1000)
+        error_type = type(exc).__name__
         error_message = f"HTTP client error during Kinozal authentication: {exc}"
-        logger.error("[kinozal] %s", error_message)
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="POST",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=http_duration_ms,
+            exc_info=True,
+        )
         raise KinozalApiError(error_message) from exc
 
     uid_cookie = cookies.get("uid")
     pass_cookie = cookies.get("pass")
     if not uid_cookie or not pass_cookie:
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = "AuthenticationError"
+        error_message = "Kinozal authentication cookies are missing."
+        logger = logger.bind(operation="auth_failed")
         logger.error(
-            "[kinozal] Authentication failed: cookies missing. "
-            "Received cookies: %s. Response URL: %s",
-            list(cookies.keys()),
-            response.url,
+            "Authentication failed",
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
         )
-        raise KinozalApiError("Kinozal authentication cookies are missing.")
+        raise KinozalApiError(error_message)
 
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    logger = logger.bind(operation="auth_success")
+    logger.info("Authentication success", duration_ms=duration_ms)
     return {"uid": uid_cookie, "pass": pass_cookie}
 
 

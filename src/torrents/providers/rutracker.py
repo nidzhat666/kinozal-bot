@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 
 import bleach
 import httpx
@@ -17,8 +17,9 @@ from models.movie_detail_service_types import (
     MovieSearchResult,
 )
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
+from utilities.logger_utils import get_provider_logger
 
-logger = logging.getLogger(__name__)
+PROVIDER_NAME = "rutracker"
 
 
 def get_url(path: str = "") -> str:
@@ -32,23 +33,74 @@ async def _build_auth_cookies(credentials: dict[str, str] | None) -> dict[str, s
     try:
         return await _authenticate(credentials)
     except Exception as exc:
-        logger.warning("[rutracker] Failed to authenticate, using guest access: %s", exc)
+        logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_failed")
+        error_type = type(exc).__name__
+        logger.warning(
+            "Authentication failed, using guest access",
+            error_type=error_type,
+            error_message=str(exc),
+        )
         return {}
 
 
 async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+    started_at = perf_counter()
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_start")
+    logger.info("Authentication started")
+    
     username = credentials.get("username")
     password = credentials.get("password")
-    async with httpx.AsyncClient() as client:
-        url = get_url("/forum/login.php")
-        data = {
-            "login_username": username,
-            "login_password": password,
-            "login": "%E2%F5%EE%E4",
-        }
-        response = await client.post(url, data=data)
-        if response.status_code != 302:
-            raise RutrackerApiError("Failed to authenticate")
+    url = get_url("/forum/login.php")
+    data = {
+        "login_username": username,
+        "login_password": password,
+        "login": "%E2%F5%EE%E4",
+    }
+    
+    try:
+        http_start = perf_counter()
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, data=data)
+            http_duration_ms = int((perf_counter() - http_start) * 1000)
+            logger = logger.bind(operation="http_request")
+            logger.info(
+                "HTTP request",
+                method="POST",
+                url=url,
+                status_code=response.status_code,
+                duration_ms=http_duration_ms,
+            )
+            if response.status_code != 302:
+                error_type = "HTTPError"
+                error_message = "Failed to authenticate"
+                logger = logger.bind(operation="http_error")
+                logger.error(
+                    "HTTP error",
+                    method="POST",
+                    url=url,
+                    error_type=error_type,
+                    error_message=error_message,
+                )
+                raise RutrackerApiError(error_message)
+    except httpx.HTTPError as exc:
+        http_duration_ms = int((perf_counter() - http_start) * 1000)
+        error_type = type(exc).__name__
+        error_message = f"HTTP client error during Rutracker authentication: {exc}"
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="POST",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=http_duration_ms,
+            exc_info=True,
+        )
+        raise RutrackerApiError(error_message) from exc
+    
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    logger = logger.bind(operation="auth_success")
+    logger.info("Authentication success", duration_ms=duration_ms)
     return {"bb_session": response.cookies.get("bb_session")}
 
 
@@ -62,35 +114,68 @@ class _RawSearchItem:
 
 
 async def _search_movies(
-    query: str, *, credentials: dict[str, str] | None = None
+    query: str,
+    *,
+    requested_item: str | None = None,
+    requested_type: str | None = None,
+    credentials: dict[str, str] | None = None,
 ) -> list[MovieSearchResult]:
     """Search for torrents on Rutracker."""
-    provider_name = "rutracker"
-    logger.debug("[%s] Starting search for query '%s'", provider_name, query)
+    started_at = perf_counter()
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="search_start")
+    logger.info(
+        "Search started",
+        query=query,
+        requested_item=requested_item,
+        requested_type=requested_type,
+    )
 
     raw_items = await _fetch_search_items(query, credentials)
     if not raw_items:
-        logger.info("[%s] No raw search results found for query '%s'", provider_name, query)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        logger = logger.bind(operation="search_no_results")
+        logger.info("Search no results", query=query, duration_ms=duration_ms)
         return []
 
-    logger.info("[%s] Found %d raw search results for query '%s'", provider_name, len(raw_items), query)
+    logger = logger.bind(operation="search_raw_results")
+    logger.info("Search raw results found", query=query, count=len(raw_items))
 
     movies: list[MovieSearchResult] = []
+    count_before = len(raw_items)
 
     for item in raw_items:
         try:
             result = _build_movie_search_result(item)
+            movies.append(result)
         except Exception as exc:
+            error_type = type(exc).__name__
+            logger = logger.bind(operation="parse_error")
             logger.error(
-                "[%s] Failed to enrich search result for id %s: %s",
-                provider_name,
-                item.movie_id,
-                exc,
+                "Failed to enrich search result",
+                item_id=item.movie_id,
+                error_type=error_type,
+                error_message=str(exc),
+                exc_info=True,
             )
             continue
-        movies.append(result)
 
-    logger.info("[%s] Successfully processed %d results for query '%s'", provider_name, len(movies), query)
+    count_after = len(movies)
+    logger = logger.bind(operation="search_processing")
+    logger.info(
+        "Search processing completed",
+        query=query,
+        count_before=count_before,
+        count_after=count_after,
+    )
+
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    logger = logger.bind(operation="search_completed")
+    logger.info(
+        "Search completed",
+        query=query,
+        count=count_after,
+        duration_ms=duration_ms,
+    )
     return movies
 
 
@@ -108,10 +193,7 @@ async def _get_search_text(
     """Get HTML content from Rutracker search page."""
     cookies = await _build_auth_cookies(credentials)
     url = get_url("/forum/tracker.php")
-    # Parameters in URL query string
     params = {"nm": query}
-    # Parameters in POST body (form data)
-    # f[]=-1: all forums, o=10: sort order, s=2: sort direction, pn=: page number (empty = first page)
     data = {
         "f[]": "-1",
         "o": "10",
@@ -119,16 +201,36 @@ async def _get_search_text(
         "pn": "",
         "nm": query,
     }
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
+    start_time = perf_counter()
 
     try:
         async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
             response = await client.post(url, params=params, data=data)
             response.raise_for_status()
-            # Rutracker typically uses cp1251 encoding
+            duration_ms = int((perf_counter() - start_time) * 1000)
+            logger.info(
+                "HTTP request",
+                method="POST",
+                url=str(response.url),
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+            )
             return response.text
     except httpx.HTTPError as exc:
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        error_type = type(exc).__name__
         error_message = f"HTTP error while requesting {url}: {exc}"
-        logger.error("[rutracker] %s", error_message)
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="POST",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
+            exc_info=True,
+        )
         raise RutrackerApiError(error_message) from exc
 
 
@@ -138,16 +240,36 @@ async def _fetch_torrent_page(
     """Get HTML content from Rutracker torrent page."""
     cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/viewtopic.php?t={movie_id}")
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
+    start_time = perf_counter()
 
     try:
         async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
-            # Rutracker typically uses cp1251 encoding
+            duration_ms = int((perf_counter() - start_time) * 1000)
+            logger.info(
+                "HTTP request",
+                method="GET",
+                url=str(response.url),
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+            )
             return response.text
     except httpx.HTTPError as exc:
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        error_type = type(exc).__name__
         error_message = f"HTTP error while requesting {url}: {exc}"
-        logger.error("[rutracker] %s", error_message)
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="GET",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
+            exc_info=True,
+        )
         raise RutrackerApiError(error_message) from exc
 
 
@@ -156,44 +278,89 @@ async def _download_movie(
     credentials: dict[str, str] | None = None,
 ) -> DownloadResult:
     """Download torrent file from Rutracker."""
-    logger.debug("[rutracker] Downloading torrent for movie id %s", movie_id)
+    started_at = perf_counter()
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
+    logger.info("Download started", movie_id=str(movie_id))
+    
     cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/dl.php?t={movie_id}")
 
     try:
+        http_start = perf_counter()
         async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
+            http_duration_ms = int((perf_counter() - http_start) * 1000)
+            logger = logger.bind(operation="http_request")
+            logger.info(
+                "HTTP request",
+                method="GET",
+                url=str(response.url),
+                status_code=response.status_code,
+                duration_ms=http_duration_ms,
+            )
             
-            # Check if we got a torrent file (should start with 'd8:announce' for bencoded torrent)
-            # or if we got redirected to an error page
             content_type = response.headers.get("content-type", "").lower()
             if "text/html" in content_type:
-                # Likely an error page or login required
-                raise RutrackerApiError(
+                error_type = "DownloadError"
+                error_message = (
                     f"Failed to download torrent {movie_id}: received HTML instead of torrent file. "
                     "This may indicate authentication is required or the torrent is not available."
                 )
+                logger = logger.bind(operation="http_error")
+                logger.error(
+                    "HTTP error",
+                    method="GET",
+                    url=str(response.url),
+                    error_type=error_type,
+                    error_message=error_message,
+                )
+                raise RutrackerApiError(error_message)
             
             payload = response.content
     except httpx.HTTPError as exc:
-        error_message = (
-            f"HTTP error while downloading Rutracker movie {movie_id}: {exc}"
+        http_duration_ms = int((perf_counter() - http_start) * 1000)
+        error_type = type(exc).__name__
+        error_message = f"HTTP error while downloading Rutracker movie {movie_id}: {exc}"
+        logger = logger.bind(operation="http_error")
+        logger.error(
+            "HTTP error",
+            method="GET",
+            url=url,
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=http_duration_ms,
+            exc_info=True,
         )
-        logger.error("[rutracker] %s", error_message)
         raise RutrackerApiError(error_message) from exc
 
-    # Validate that we got a torrent file
     if not payload or len(payload) < 10:
-        raise RutrackerApiError(
-            f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = "DownloadError"
+        error_message = f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
+        logger = logger.bind(operation="download_error")
+        logger.error(
+            "Download error",
+            movie_id=str(movie_id),
+            error_type=error_type,
+            error_message=error_message,
+            duration_ms=duration_ms,
         )
+        raise RutrackerApiError(error_message)
 
-    # Save torrent file to temporary directory
     target = Path(tempfile.gettempdir()) / f"rutracker_{movie_id}.torrent"
     target.write_bytes(payload)
 
-    logger.info("[rutracker] Torrent file for movie %s saved to %s", movie_id, target)
+    duration_ms = int((perf_counter() - started_at) * 1000)
+    file_size = len(payload)
+    logger = logger.bind(operation="download_success")
+    logger.info(
+        "Download success",
+        movie_id=str(movie_id),
+        file_path=str(target),
+        file_size=file_size,
+        duration_ms=duration_ms,
+    )
     return DownloadResult(file_path=str(target), filename=target.name)
 
 
@@ -286,9 +453,10 @@ def _deduplicate_hr(soup: BeautifulSoup) -> None:
 
 def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
     """Extract HTML content from the first post_body element."""
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_details")
     post_body = soup.find("div", class_="post_body")
     if not post_body:
-        logger.warning("[rutracker] post_body element not found on page")
+        logger.warning("post_body element not found on page")
         return None
     
     # Remove all elements with class="sp-wrap"
@@ -353,16 +521,23 @@ def _clean_and_convert_html(html: str) -> str:
             
         return str(soup)
     except Exception as exc:
-        logger.warning("[rutracker] Failed to process HTML structure: %s", exc)
+        logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_error")
+        error_type = type(exc).__name__
+        logger.warning(
+            "Failed to process HTML structure",
+            error_type=error_type,
+            error_message=str(exc),
+        )
         return cleaned_html
 
 
 def _parse_search_results(html: str) -> list[_RawSearchItem]:
     """Parse Rutracker search results HTML."""
+    logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_results")
     soup = BeautifulSoup(html, "html.parser")
     table = soup.find("table", id="tor-tbl")
     if not table:
-        logger.debug("[rutracker] No torrent table found in response")
+        logger.debug("No torrent table found in response", count=0)
         return []
 
     results: list[_RawSearchItem] = []
@@ -374,7 +549,6 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
             if not movie_id:
                 continue
 
-            # Title is in div.t-title -> a.tLink
             title_div = row.find("div", class_="t-title")
             if not title_div:
                 continue
@@ -385,13 +559,10 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
 
             title = title_link.get_text(strip=True)
 
-            # Size is in td.tor-size
             size_cell = row.find("td", class_="tor-size")
             size = size_cell.get_text(strip=True) if size_cell else "N/A"
-            # Cleanup size text (remove arrow symbols)
             size = size.replace("↓", "").replace("↑", "").strip()
 
-            # Seeds - try to find by class seedmed, or by cell index
             seeds_cell = row.find("td", class_="seedmed")
             if not seeds_cell:
                 cells = row.find_all("td")
@@ -406,7 +577,6 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
                 except (ValueError, AttributeError):
                     pass
 
-            # Peers - try to find by class leechmed, or by cell index
             peers_cell = row.find("td", class_="leechmed")
             if not peers_cell:
                 cells = row.find_all("td")
@@ -430,10 +600,17 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
                 )
             )
         except Exception as exc:
-            logger.error("[rutracker] Error parsing search row: %s", exc)
+            error_type = type(exc).__name__
+            logger = logger.bind(operation="parse_error")
+            logger.error(
+                "Error parsing search row",
+                error_type=error_type,
+                error_message=str(exc),
+                exc_info=True,
+            )
             continue
 
-    logger.debug("[rutracker] Parsed %d search results", len(results))
+    logger.debug("Parsed search results", count=len(results))
     return results
 
 
@@ -497,28 +674,27 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         requested_type: str | None = None,
     ) -> list[MovieSearchResult]:
         """Search for torrents on Rutracker."""
-        return await _search_movies(query, credentials=self._credentials)
+        return await _search_movies(
+            query,
+            requested_item=requested_item,
+            requested_type=requested_type,
+            credentials=self._credentials,
+        )
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
         """Get detailed information about a torrent from Rutracker."""
-        logger.debug("[rutracker] Fetching movie details for id %s", movie_id)
+        logger = get_provider_logger(PROVIDER_NAME).bind(operation="fetch_details")
+        logger.debug("Fetching movie details", movie_id=str(movie_id))
         
         try:
-            # Fetch the torrent page HTML
             html = await _fetch_torrent_page(movie_id, self._credentials)
-            
-            # Parse with BeautifulSoup
             soup = BeautifulSoup(html, "html.parser")
-            
-            # Extract post_body HTML
             post_body_html = _extract_post_body_html(soup)
             
-            # Clean and convert HTML
             cleaned_html = None
             if post_body_html:
                 cleaned_html = _clean_and_convert_html(post_body_html)
             
-            # Try to extract title from page
             title = ""
             title_tag = soup.find("h1")
             if title_tag:
@@ -528,7 +704,6 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
                 else:
                     title = title_tag.get_text(strip=True)
             
-            # Create MovieDetails with HTML content
             return MovieDetails(
                 name=title or f"Torrent {movie_id}",
                 year="",
@@ -545,8 +720,16 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
                 torrent_html_content=cleaned_html,
             )
         except Exception as exc:
+            error_type = type(exc).__name__
             error_message = f"Error fetching Rutracker movie detail for id {movie_id}: {exc}"
-            logger.error("[rutracker] %s", error_message, exc_info=True)
+            logger = logger.bind(operation="parse_error")
+            logger.error(
+                "Parse error",
+                item_id=str(movie_id),
+                error_type=error_type,
+                error_message=error_message,
+                exc_info=True,
+            )
             raise RutrackerApiError(error_message) from exc
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:

@@ -1,4 +1,4 @@
-import logging
+from time import perf_counter
 
 from aiogram import Router
 from aiogram.types import CallbackQuery, Message
@@ -24,38 +24,62 @@ from utilities.media_search_utils import (
     show_season_choices,
 )
 from utilities.torrent_search_utils import perform_torrent_search
+from utilities.logger_utils import get_handler_logger
 from torrents import get_active_providers
 from . import movie_detail_handler
 
-logger = logging.getLogger(__name__)
+logger = get_handler_logger("search")
 router = Router(name=__name__)
 router.include_routers(movie_detail_handler.router)
 
 
 @router.message()
 async def handle_search_query(message: Message):
+    started_at = perf_counter()
+    user_id = message.from_user.id if message.from_user else None
+    handler_logger = logger.bind(user_id=user_id, operation="search_query")
+    
     query = (message.text or "").strip()
     if not query:
         await message.answer("Введите название фильма или сериала.")
         return
 
     status_message = await message.answer(f"Ищу «{query}»...")
+    handler_logger.info("Search query received", query=query)
 
     try:
         await show_media_results(query, status_message)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        handler_logger.info("Search query completed", query=query, duration_ms=duration_ms)
     except NoResultsFoundError:
-        logger.info("Search for '%s' returned no results.", query)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        handler_logger.info("Search returned no results", query=query, duration_ms=duration_ms)
         await status_message.edit_text(
             f"К сожалению, по запросу «{query}» ничего не найдено."
         )
     except (KinopoiskApiError, TmdbApiError) as exc:
-        logger.warning("Search API error for '%s': %s", query, exc)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = type(exc).__name__
+        handler_logger.warning(
+            "Search API error",
+            query=query,
+            error_type=error_type,
+            error_message=str(exc),
+            duration_ms=duration_ms,
+        )
         await status_message.edit_text(
             "Произошла ошибка при обращении к сервису поиска."
         )
     except Exception as exc:
-        logger.error(
-            "Unexpected error during search for '%s': %s", query, exc, exc_info=True
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = type(exc).__name__
+        handler_logger.error(
+            "Unexpected error during search",
+            query=query,
+            error_type=error_type,
+            error_message=str(exc),
+            duration_ms=duration_ms,
+            exc_info=True,
         )
         await status_message.edit_text("Произошла непредвиденная ошибка при поиске.")
 

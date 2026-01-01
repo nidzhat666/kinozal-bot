@@ -1,5 +1,3 @@
-import logging
-
 from aiogram import Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
@@ -17,9 +15,10 @@ from services.qbt_services import get_client
 from services.qbt_services.qbt_status import torrents_info
 from utilities.common import truncate_string
 from utilities.handlers_utils import redis_callback_save
+from utilities.logger_utils import get_handler_logger
 
 router = Router(name=__name__)
-logger = logging.getLogger(__name__)
+logger = get_handler_logger("torrents_statuses")
 
 
 def format_progress_bar(progress: float) -> str:

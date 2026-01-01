@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import re
 from collections import Counter
 from itertools import groupby
+from time import perf_counter
 
 from aiogram.types import (
     CallbackQuery,
@@ -24,8 +24,9 @@ from utilities.media_utils import (
     parse_video_quality,
 )
 from utilities.handlers_utils import redis_callback_save
+from utilities.logger_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def perform_torrent_search(
@@ -69,7 +70,15 @@ async def perform_torrent_search(
                 queries.add(f"{clean_title}{suffix}")
 
     queries = {q for q in queries if q.strip()}
-    logger.info("Performing parallel search for queries: %s", queries)
+    started_at = perf_counter()
+    search_logger = logger.bind(component="utility", operation="torrent_search")
+    search_logger.info(
+        "Performing parallel search",
+        query_count=len(queries),
+        queries=list(queries),
+        requested_item=requested_item,
+        requested_type=requested_type,
+    )
 
     active_providers = get_active_providers()
     if not active_providers:
@@ -77,11 +86,14 @@ async def perform_torrent_search(
         await target_message.edit_text("Нет активных торрент-провайдеров. Проверьте настройки.")
         return
 
-    logger.info("Searching in %d active providers: %s", len(active_providers), [p.name for p in active_providers])
+    provider_names = [p.name for p in active_providers]
+    search_logger.info(
+        "Searching in active providers",
+        provider_count=len(active_providers),
+        providers=provider_names,
+    )
     target_message = callback_query.message if callback_query else message
 
-    # Create tasks: for each query, search in all active providers
-    # Store provider and query info with each task to track results by provider
     tasks_with_info = [
         (provider, q, provider.search(
             q,
@@ -103,43 +115,63 @@ async def perform_torrent_search(
         for (provider, query, _), res in zip(tasks_with_info, results_list):
             provider_name = provider.name
             if isinstance(res, Exception):
-                logger.warning(
-                    "[%s] Search failed for query '%s': %s",
-                    provider_name,
-                    query,
-                    res
+                error_type = type(res).__name__
+                search_logger.warning(
+                    "Search failed",
+                    provider=provider_name,
+                    query=query,
+                    error_type=error_type,
+                    error_message=str(res),
                 )
                 provider_stats[provider_name] = provider_stats.get(provider_name, 0)
             elif isinstance(res, list):
                 count = len(res)
                 provider_stats[provider_name] = provider_stats.get(provider_name, 0) + count
                 raw_results.extend(res)
-                logger.info(
-                    "[%s] Found %d torrents for query '%s'",
-                    provider_name,
-                    count,
-                    query
+                search_logger.info(
+                    "Found torrents",
+                    provider=provider_name,
+                    query=query,
+                    count=count,
                 )
         
-        # Log total stats per provider
         for provider_name, total_count in provider_stats.items():
-            logger.info(
-                "[%s] Total results across all queries: %d torrents",
-                provider_name,
-                total_count
+            search_logger.info(
+                "Total results across all queries",
+                provider=provider_name,
+                total_count=total_count,
             )
 
     except Exception as exc:
-        logger.error(
-            "Torrent search critical failure: %s", exc, exc_info=True
+        error_type = type(exc).__name__
+        search_logger.error(
+            "Torrent search critical failure",
+            error_type=error_type,
+            error_message=str(exc),
+            exc_info=True,
         )
         await target_message.edit_text("Не удалось выполнить поиск по торрентам.")
         return
 
+    count_before = len(raw_results)
     results = _filter_and_process_results(raw_results, media_details, season_number)
+    count_after = len(results)
+    filtered_count = count_before - count_after
+
+    filter_logger = logger.bind(component="utility", operation="filter_results")
+    filter_logger.info(
+        "Filter results completed",
+        count_before=count_before,
+        count_after=count_after,
+        filtered_count=filtered_count,
+    )
 
     if not results:
-        logger.info("No torrent results found after filtering")
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        search_logger.info(
+            "No torrent results found after filtering",
+            duration_ms=duration_ms,
+        )
         await target_message.edit_text("По запросу ничего не найдено.")
         return
 
@@ -169,14 +201,22 @@ async def perform_torrent_search(
 
         message_text = f"Выберите результат{' для «' + requested_item + '»' if requested_item else ''}:"
         await target_message.edit_text(message_text, reply_markup=keyboard)
-        logger.info(
-            "Sent %d torrent search results (merged from %d queries)", len(results), len(queries)
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        search_logger.info(
+            "Sent torrent search results",
+            result_count=len(results),
+            query_count=len(queries),
+            duration_ms=duration_ms,
         )
 
     except Exception as exc:
-        logger.error(
-            "Failed to send torrent search results: %s",
-            exc,
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        error_type = type(exc).__name__
+        search_logger.error(
+            "Failed to send torrent search results",
+            error_type=error_type,
+            error_message=str(exc),
+            duration_ms=duration_ms,
             exc_info=True,
         )
         await target_message.edit_text("Не удалось отобразить результаты поиска.")
@@ -433,111 +473,56 @@ def _filter_and_process_results(
         # Filter out audio releases (soundtracks, OST, MP3, FLAC, audio pack, etc.)
         if _is_audio_release(result_name):
             skip_reasons["audio_release"] += 1
-            logger.info(
-                "[%s] SKIP audio_release: [%s] %s",
-                provider_name,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
         
         # Filter out disc images (DVD9, DVD-5, NTSC, PAL, etc.)
         if _is_disc_image(result_name):
             skip_reasons["disc_image"] += 1
-            logger.info(
-                "[%s] SKIP disc_image: [%s] %s",
-                provider_name,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
         
         # Filter out releases with multiple resolutions (e.g., 1080p + 720p in one file)
         if _has_multiple_resolutions(result_name):
             skip_reasons["multiple_resolutions"] += 1
-            logger.info(
-                "[%s] SKIP multiple_resolutions: [%s] %s",
-                provider_name,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
         
         # Filter out releases with multiple video tracks
         if _has_multiple_video_tracks(result_name):
             skip_reasons["multiple_video_tracks"] += 1
-            logger.info(
-                "[%s] SKIP multiple_video_tracks: [%s] %s",
-                provider_name,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
         
         # Filter out Unknown quality results that don't have video markers
         if result.video_quality is None or result.video_quality == "Unknown":
             if not _has_video_markers(result_name):
                 skip_reasons["unknown_quality"] += 1
-                logger.info(
-                    "[%s] SKIP unknown_quality (no video markers): [%s] %s",
-                    provider_name,
-                    result.video_quality or "N/A",
-                    result_name[:80],
-                )
                 continue
         
         # Filter out season packs when looking for a specific season
         if _is_season_pack(result_name, season_number):
             skip_reasons["season_pack"] += 1
-            logger.info(
-                "[%s] SKIP season_pack (S%02d): [%s] %s",
-                provider_name,
-                season_number,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
         
         if season_number is not None and not is_season_match(
             result_name, season_number
         ):
             skip_reasons["season_mismatch"] += 1
-            logger.info(
-                "[%s] SKIP season_mismatch (S%02d): [%s] %s",
-                provider_name,
-                season_number,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
 
         if expected_titles and not _is_fuzzy_match(result_name, expected_titles):
             skip_reasons["title_mismatch"] += 1
-            logger.info(
-                "[%s] SKIP title_mismatch: [%s] %s",
-                provider_name,
-                result.video_quality or "N/A",
-                result_name[:80],
-            )
             continue
 
         seen_movie_ids.add(result.id)
         results.append(result)
         quality_counter[result.video_quality or "Unknown"] += 1
-        logger.info(
-            "[%s] ACCEPTED: [%s] seeds=%s %s",
-            provider_name,
-            result.video_quality or "N/A",
-            result.seeds,
-            result_name,
-        )
 
     _log_quality_stats(quality_counter, len(raw_results), len(results))
     
     if skip_reasons:
-        logger.info(
-            "Skip reasons: %s",
-            ", ".join(f"{reason}: {count}" for reason, count in skip_reasons.most_common()),
+        skip_reasons_dict = dict(skip_reasons.most_common())
+        filter_logger = logger.bind(component="utility", operation="filter_results")
+        filter_logger.info(
+            "Skip reasons",
+            skip_reasons=skip_reasons_dict,
         )
     
     return results
@@ -549,19 +534,21 @@ def _log_quality_stats(
     total_filtered: int,
 ) -> None:
     """Log statistics about found video qualities."""
+    quality_logger = logger.bind(component="utility", operation="quality_stats")
     if not quality_counter:
-        logger.info("No torrents found after filtering (raw: %d)", total_raw)
+        quality_logger.info(
+            "No torrents found after filtering",
+            total_raw=total_raw,
+            total_filtered=0,
+        )
         return
 
-    # Sort by count descending
-    sorted_stats = quality_counter.most_common()
-    stats_str = ", ".join(f"{quality}: {count}" for quality, count in sorted_stats)
-    
-    logger.info(
-        "Quality stats (filtered %d/%d): %s",
-        total_filtered,
-        total_raw,
-        stats_str,
+    quality_distribution = dict(quality_counter.most_common())
+    quality_logger.info(
+        "Quality stats",
+        total_raw=total_raw,
+        total_filtered=total_filtered,
+        quality_distribution=quality_distribution,
     )
 
 
@@ -758,10 +745,11 @@ def _create_result_button(
     if result.provider_name:
         payload["provider_name"] = result.provider_name
     else:
-        logger.warning(
-            "MovieSearchResult missing provider_name for movie ID: %s, name: %s",
-            result.id,
-            result.name[:50] if result.name else "unknown"
+        filter_logger = logger.bind(component="utility", operation="filter_results")
+        filter_logger.warning(
+            "MovieSearchResult missing provider_name",
+            movie_id=result.id,
+            name=result.name[:50] if result.name else "unknown",
         )
     
     if media_details:

@@ -1,4 +1,4 @@
-import logging
+
 
 from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -28,7 +28,8 @@ from utilities.handlers_utils import (
 )
 
 router = Router(name=__name__)
-logger = logging.getLogger(__name__)
+from utilities.logger_utils import get_handler_logger
+logger = get_handler_logger(__name__.split(".")[-1])
 
 
 def create_detail_message(torrent: TorrentInfo) -> str:
