@@ -176,6 +176,9 @@ async def perform_torrent_search(
         return
 
     results = _sort_and_group_results(results)
+    
+    # Log final results per provider after grouping
+    _log_final_results_stats(results)
 
     results_json = [r.model_dump(mode="json") for r in results]
     results_cache_data = {
@@ -447,6 +450,9 @@ def _filter_and_process_results(
     
     # Stats for debugging
     skip_reasons: Counter[str] = Counter()
+    
+    # Per-provider statistics
+    provider_stats: dict[str, dict] = {}
 
     expected_titles = []
     if media_details:
@@ -456,66 +462,105 @@ def _filter_and_process_results(
 
     for result in raw_results:
         result_name = result.search_name or result.name
+        provider_name = result.provider_name or "unknown"
+        
+        # Initialize provider stats if not exists
+        if provider_name not in provider_stats:
+            provider_stats[provider_name] = {
+                "raw_count": 0,
+                "filtered_count": 0,
+                "accepted_count": 0,
+                "total_seeds": 0,
+                "skip_reasons": Counter(),
+            }
+        
+        provider_stats[provider_name]["raw_count"] += 1
         
         if result.id in seen_movie_ids:
             skip_reasons["duplicate"] += 1
+            provider_stats[provider_name]["skip_reasons"]["duplicate"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
             
         if not result.seeds:
             skip_reasons["no_seeds"] += 1
+            provider_stats[provider_name]["skip_reasons"]["no_seeds"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
 
         if not result.video_quality:
             result.video_quality = parse_video_quality(result_name)
-
-        provider_name = result.provider_name or "unknown"
         
         # Filter out audio releases (soundtracks, OST, MP3, FLAC, audio pack, etc.)
         if _is_audio_release(result_name):
             skip_reasons["audio_release"] += 1
+            provider_stats[provider_name]["skip_reasons"]["audio_release"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
         
         # Filter out disc images (DVD9, DVD-5, NTSC, PAL, etc.)
         if _is_disc_image(result_name):
             skip_reasons["disc_image"] += 1
+            provider_stats[provider_name]["skip_reasons"]["disc_image"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
         
         # Filter out releases with multiple resolutions (e.g., 1080p + 720p in one file)
         if _has_multiple_resolutions(result_name):
             skip_reasons["multiple_resolutions"] += 1
+            provider_stats[provider_name]["skip_reasons"]["multiple_resolutions"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
         
         # Filter out releases with multiple video tracks
         if _has_multiple_video_tracks(result_name):
             skip_reasons["multiple_video_tracks"] += 1
+            provider_stats[provider_name]["skip_reasons"]["multiple_video_tracks"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
         
         # Filter out Unknown quality results that don't have video markers
         if result.video_quality is None or result.video_quality == "Unknown":
             if not _has_video_markers(result_name):
                 skip_reasons["unknown_quality"] += 1
+                provider_stats[provider_name]["skip_reasons"]["unknown_quality"] += 1
+                provider_stats[provider_name]["filtered_count"] += 1
                 continue
         
         # Filter out season packs when looking for a specific season
         if _is_season_pack(result_name, season_number):
             skip_reasons["season_pack"] += 1
+            provider_stats[provider_name]["skip_reasons"]["season_pack"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
         
         if season_number is not None and not is_season_match(
             result_name, season_number
         ):
             skip_reasons["season_mismatch"] += 1
+            provider_stats[provider_name]["skip_reasons"]["season_mismatch"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
 
         if expected_titles and not _is_fuzzy_match(result_name, expected_titles):
             skip_reasons["title_mismatch"] += 1
+            provider_stats[provider_name]["skip_reasons"]["title_mismatch"] += 1
+            provider_stats[provider_name]["filtered_count"] += 1
             continue
 
         seen_movie_ids.add(result.id)
         results.append(result)
         quality_counter[result.video_quality or "Unknown"] += 1
+        
+        # Update accepted stats
+        provider_stats[provider_name]["accepted_count"] += 1
+        if result.seeds:
+            provider_stats[provider_name]["total_seeds"] += result.seeds
 
     _log_quality_stats(quality_counter, len(raw_results), len(results))
+    
+    # Log per-provider statistics
+    _log_provider_stats(provider_stats)
     
     if skip_reasons:
         skip_reasons_dict = dict(skip_reasons.most_common())
@@ -550,6 +595,70 @@ def _log_quality_stats(
         total_filtered=total_filtered,
         quality_distribution=quality_distribution,
     )
+
+
+def _log_provider_stats(provider_stats: dict[str, dict]) -> None:
+    """Log per-provider statistics for filtering and quality metrics."""
+    provider_logger = logger.bind(component="utility", operation="filter_results")
+    
+    for provider_name, stats in provider_stats.items():
+        accepted_count = stats["accepted_count"]
+        avg_seeds = (
+            stats["total_seeds"] / accepted_count
+            if accepted_count > 0
+            else 0.0
+        )
+        
+        skip_reasons_dict = dict(stats["skip_reasons"].most_common())
+        
+        provider_logger.info(
+            "Provider stats",
+            provider=provider_name,
+            raw_count=stats["raw_count"],
+            filtered_count=stats["filtered_count"],
+            accepted_count=accepted_count,
+            avg_seeds=round(avg_seeds, 2),
+            total_seeds=stats["total_seeds"],
+            skip_reasons=skip_reasons_dict,
+        )
+
+
+def _log_final_results_stats(results: list[MovieSearchResult]) -> None:
+    """Log statistics about final results after grouping, per provider."""
+    if not results:
+        return
+    
+    final_logger = logger.bind(component="utility", operation="torrent_search")
+    
+    # Count results per provider
+    provider_counts: dict[str, int] = Counter()
+    provider_seeds: dict[str, list[int]] = {}
+    
+    for result in results:
+        provider_name = result.provider_name or "unknown"
+        provider_counts[provider_name] += 1
+        
+        if provider_name not in provider_seeds:
+            provider_seeds[provider_name] = []
+        
+        if result.seeds:
+            provider_seeds[provider_name].append(result.seeds)
+    
+    # Log per-provider final counts
+    for provider_name, count in provider_counts.items():
+        seeds_list = provider_seeds.get(provider_name, [])
+        avg_seeds = sum(seeds_list) / len(seeds_list) if seeds_list else 0.0
+        min_seeds = min(seeds_list) if seeds_list else 0
+        max_seeds = max(seeds_list) if seeds_list else 0
+        
+        final_logger.info(
+            "Final results per provider",
+            provider=provider_name,
+            count=count,
+            avg_seeds=round(avg_seeds, 2),
+            min_seeds=min_seeds,
+            max_seeds=max_seeds,
+        )
 
 
 def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
