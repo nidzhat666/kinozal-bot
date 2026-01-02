@@ -274,6 +274,42 @@ def is_season_match(title: str, target_season: int) -> bool:
     return extracted == target_season if extracted is not None else False
 
 
+def parse_year(year: int | str | None) -> int | None:
+    """Parse and validate year from various formats.
+    
+    Extracts a 4-digit year from string or returns integer year.
+    Returns None if year cannot be reliably determined.
+    
+    This function ensures that non-numeric values (like director names)
+    are not used as years in file naming.
+    
+    Examples:
+        - "2024" -> 2024
+        - "1999-2004" -> 1999
+        - "Шейн Блэк" -> None
+        - 2013 -> 2013
+        - None -> None
+    """
+    if year is None:
+        return None
+    
+    # If already an integer, validate it's a reasonable year
+    if isinstance(year, int):
+        if 1900 <= year <= 2100:
+            return year
+        return None
+    
+    # If string, extract first 4-digit year
+    if isinstance(year, str):
+        year_match = re.search(r'(\d{4})', str(year))
+        if year_match:
+            parsed_year = int(year_match.group(1))
+            # Validate it's a reasonable year
+            if 1900 <= parsed_year <= 2100:
+                return parsed_year
+    return None
+
+
 __all__ = [
     "build_torrent_query_from_media_details",
     "clean_title_for_query",
@@ -281,4 +317,5 @@ __all__ = [
     "calculate_similarity",
     "extract_season_number",
     "is_season_match",
+    "parse_year",
 ]

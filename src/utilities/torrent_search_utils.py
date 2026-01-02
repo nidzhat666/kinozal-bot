@@ -22,6 +22,7 @@ from utilities.media_utils import (
     clean_title_for_query,
     is_season_match,
     parse_video_quality,
+    parse_year,
 )
 from utilities.handlers_utils import redis_callback_save
 from utilities.logger_utils import get_logger
@@ -906,9 +907,11 @@ def _create_result_button(
         )
     
     if media_details:
+        # Parse and validate year to ensure it's numeric, not director name or other text
+        parsed_year = parse_year(media_details.year)
         payload["tmdb_info"] = {
             "original_title": media_details.original_title,
-            "year": media_details.year,
+            "year": parsed_year,
             "quality": result.video_quality,
         }
         if season_number is not None and media_details.is_series:

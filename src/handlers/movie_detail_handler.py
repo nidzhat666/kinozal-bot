@@ -20,7 +20,7 @@ from torrents import get_torrent_provider, get_registered_providers
 from services.qbt_services import qbt_get_categories, get_client
 from utilities import handlers_utils
 from utilities.handlers_utils import check_action
-from utilities.media_utils import parse_video_quality
+from utilities.media_utils import parse_video_quality, parse_year
 from pydantic import ValidationError
 
 from utilities.logger_utils import get_handler_logger
@@ -544,12 +544,8 @@ def _create_fallback_tmdb_info(movie_details: MovieDetails) -> dict:
         quality = parse_video_quality(name)
     
     # Parse year - it might be a string like "2024" or range "1999-2004"
-    parsed_year = None
-    if year:
-        # Extract first year from string
-        year_match = re.search(r'(\d{4})', str(year))
-        if year_match:
-            parsed_year = int(year_match.group(1))
+    # Use parse_year utility to ensure we don't use non-numeric values (like director names)
+    parsed_year = parse_year(year)
     
     return {
         "original_title": original_title,
