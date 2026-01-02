@@ -232,16 +232,34 @@ def _is_audio_release(result_name: str) -> bool:
     Strictly filters out audio packs, audio tracks, and audio-only releases.
     """
     result_lower = result_name.lower()
+
     
     # Strictly audio releases - rarely/never used for video
-    strict_audio_keywords = [
+    # Use word boundaries for short keywords that could be substrings (e.g., "ost" in "post-production")
+    strict_audio_keywords_word_boundary = [
+        r"\bost\b",  # "ost" as whole word (not "post", "cost", "host", etc.)
+        r"\bscore\b",  # "score" as whole word (not "scoreboard", etc.)
+    ]
+    
+    # Multi-word or longer keywords that are less likely to be false positives
+    strict_audio_keywords_substring = [
         "audio pack",
         "[audio pack]",
         "soundtrack",
-        "ost",
-        "score",
         "саундтрек",
     ]
+    
+    # Check word-boundary keywords first (using regex)
+    for pattern in strict_audio_keywords_word_boundary:
+        if re.search(pattern, result_lower):
+            logger.debug(f"Strict audio keyword (word boundary) found: '{pattern}' in '{result_name}'")
+            return True
+    
+    # Check substring keywords
+    for keyword in strict_audio_keywords_substring:
+        if keyword in result_lower:
+            logger.debug(f"Strict audio keyword found: '{keyword}' in '{result_name}'")
+            return True
     
     # Conditional filters - skip only if NO video markers are found
     # These might appear in video titles (e.g. "BDRip 1080p FLAC", "MVO озвучка")
@@ -259,20 +277,10 @@ def _is_audio_release(result_name: str) -> bool:
         "музыка",
     ]
     
-    # Check strict filters first
-    for keyword in strict_audio_keywords:
-        if keyword in result_lower:
-            return True
-            
-    # Check if it has video markers
-    # If it has video markers, it's likely NOT an audio release (even if it mentions FLAC/MP3)
-    has_video = _has_video_markers(result_name)
-    if has_video:
-        return False
-    
     # If no video markers, check conditional keywords
     for keyword in conditional_audio_keywords:
         if keyword in result_lower:
+            logger.debug(f"Conditional audio keyword found: '{keyword}' in '{result_name}' (no video markers found)")
             return True
     
     # Check AC3/DTS without video markers (audio-only, not video with AC3/DTS audio track)
@@ -499,9 +507,15 @@ def _filter_and_process_results(
 
         if not result.video_quality:
             result.video_quality = parse_video_quality(result_name)
-        
+
+
         # Filter out audio releases (soundtracks, OST, MP3, FLAC, audio pack, etc.)
-        if _is_audio_release(result_name):
+        if not _has_video_markers(result_name) and _is_audio_release(result_name) :
+            logger.debug(
+                "Filtered as audio release",
+                name=result_name,
+                provider=provider_name
+            )
             skip_reasons["audio_release"] += 1
             provider_stats[provider_name]["skip_reasons"]["audio_release"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -509,6 +523,11 @@ def _filter_and_process_results(
         
         # Filter out disc images (DVD9, DVD-5, NTSC, PAL, etc.)
         if _is_disc_image(result_name):
+            logger.debug(
+                "Filtered as disc image",
+                name=result_name,
+                provider=provider_name
+            )
             skip_reasons["disc_image"] += 1
             provider_stats[provider_name]["skip_reasons"]["disc_image"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -516,6 +535,11 @@ def _filter_and_process_results(
         
         # Filter out releases with multiple resolutions (e.g., 1080p + 720p in one file)
         if _has_multiple_resolutions(result_name):
+            logger.debug(
+                "Filtered as multiple resolutions",
+                name=result_name,
+                provider=provider_name
+            )
             skip_reasons["multiple_resolutions"] += 1
             provider_stats[provider_name]["skip_reasons"]["multiple_resolutions"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -523,6 +547,11 @@ def _filter_and_process_results(
         
         # Filter out releases with multiple video tracks
         if _has_multiple_video_tracks(result_name):
+            logger.debug(
+                "Filtered as multiple video tracks",
+                name=result_name,
+                provider=provider_name
+            )
             skip_reasons["multiple_video_tracks"] += 1
             provider_stats[provider_name]["skip_reasons"]["multiple_video_tracks"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -531,6 +560,11 @@ def _filter_and_process_results(
         # Filter out Unknown quality results that don't have video markers
         if result.video_quality is None or result.video_quality == "Unknown":
             if not _has_video_markers(result_name):
+                logger.debug(
+                    "Filtered as unknown quality without video markers",
+                    name=result_name,
+                    provider=provider_name
+                )
                 skip_reasons["unknown_quality"] += 1
                 provider_stats[provider_name]["skip_reasons"]["unknown_quality"] += 1
                 provider_stats[provider_name]["filtered_count"] += 1
@@ -538,6 +572,12 @@ def _filter_and_process_results(
         
         # Filter out season packs when looking for a specific season
         if _is_season_pack(result_name, season_number):
+            logger.debug(
+                "Filtered as season pack",
+                name=result_name,
+                season_number=season_number,
+                provider=provider_name
+            )
             skip_reasons["season_pack"] += 1
             provider_stats[provider_name]["skip_reasons"]["season_pack"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -546,6 +586,12 @@ def _filter_and_process_results(
         if season_number is not None and not is_season_match(
             result_name, season_number
         ):
+            logger.debug(
+                "Filtered as season mismatch",
+                name=result_name,
+                target_season=season_number,
+                provider=provider_name
+            )
             skip_reasons["season_mismatch"] += 1
             provider_stats[provider_name]["skip_reasons"]["season_mismatch"] += 1
             provider_stats[provider_name]["filtered_count"] += 1
@@ -781,32 +827,21 @@ def _get_quality_priority(quality: VideoQuality | str | None) -> int:
 def _sort_and_group_results(
     results: list[MovieSearchResult],
 ) -> list[MovieSearchResult]:
-    """Group results by quality and select best (max seeds) from each group.
+    """Group by quality, select best (max seeds) per quality, sort by priority."""
+    def quality_key(r: MovieSearchResult) -> str:
+        q = r.video_quality
+        if isinstance(q, VideoQuality):
+            return q.value
+        return str(q).strip() if q else "N/A"
     
-    Then sort final results by quality priority (lower priority = better quality).
-    """
-    def get_quality_key(r: MovieSearchResult) -> str:
-        """Get quality as string for grouping."""
-        return r.video_quality or "N/A"
-
-    # Sort by quality for grouping
-    results.sort(key=get_quality_key)
-    best_results = []
-
-    # Group by quality and select best (max seeds) from each group
-    for _, group in groupby(results, key=get_quality_key):
-        group_list = list(group)
-        best_in_group = max(
-            group_list, 
-            key=lambda r: r.seeds if r.seeds is not None else -1
-        )
-        best_results.append(best_in_group)
-
-    # Sort final results by quality priority (lower = better)
-    best_results.sort(
-        key=lambda r: _get_quality_priority(r.video_quality)
-    )
-    return best_results
+    results.sort(key=quality_key)
+    best = []
+    
+    for _, group in groupby(results, key=quality_key):
+        best.append(max(group, key=lambda r: r.seeds or -1))
+    
+    best.sort(key=lambda r: _get_quality_priority(r.video_quality))
+    return best
 
 
 def format_torrent_search_results(
