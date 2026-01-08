@@ -45,30 +45,28 @@ async def perform_torrent_search(
     queries = {query}
 
     if media_details:
-        suffix = ""
-        season_variants_str = ""
+        titles = [t for t in [media_details.title, media_details.original_title] if t]
+        clean_titles = [clean_title_for_query(t) for t in titles]
         
         if season_number is not None and media_details.is_series:
-            s_num = str(season_number)
-            season_variants = [
-                f"сезон {s_num}",
-                f"season {s_num}",
-                f"S{season_number:02d}",
-            ]
-            season_variants_str = f" ({'|'.join(season_variants)})"
-        elif media_details.year and not media_details.is_series:
-            suffix = f" ({media_details.year})"
-
-        titles_to_check = [
-            t for t in [media_details.title, media_details.original_title] if t
-        ]
-        
-        for title in titles_to_check:
-            clean_title = clean_title_for_query(title)
-            if season_variants_str:
-                queries.add(f"{clean_title}{season_variants_str}")
+            season_variants = f"сезон {season_number}|season {season_number}|S{season_number:02d}"
+            for clean_title in clean_titles:
+                queries.add(f"{clean_title} ({season_variants})")
+        elif not media_details.is_series:
+            parsed_year = parse_year(media_details.year)
+            if parsed_year and 1900 <= parsed_year <= 2100:
+                year_range = [y for y in [parsed_year - 1, parsed_year, parsed_year + 1] if 1900 <= y <= 2100]
+                if year_range:
+                    year_range_str = " | ".join(str(y) for y in year_range)
+                    for clean_title in clean_titles:
+                        queries.add(f"{clean_title} {year_range_str}")
+                    if len(clean_titles) > 1:
+                        combined_titles = "|".join(sorted(clean_titles))
+                        queries.add(f"({combined_titles}) + ({year_range_str})")
             else:
-                queries.add(f"{clean_title}{suffix}")
+                queries.update(clean_titles)
+        else:
+            queries.update(clean_titles)
 
     queries = {q for q in queries if q.strip()}
     started_at = perf_counter()
