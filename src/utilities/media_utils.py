@@ -18,108 +18,72 @@ def build_torrent_query_from_media_details(
     season_year: int | None = None,
     max_length: int | None = 64,
 ) -> str:
-    # Prepare titles
     titles = set()
     if media_details.title:
         titles.add(clean_title_for_query(media_details.title))
     if media_details.original_title:
         titles.add(clean_title_for_query(media_details.original_title))
 
-    # We prefer the Russian title (usually stored in 'title') for single-title fallback
-    # But let's keep track of them explicitly
-    ru_title = (
-        clean_title_for_query(media_details.title) if media_details.title else None
-    )
-    en_title = (
-        clean_title_for_query(media_details.original_title)
-        if media_details.original_title
-        else None
-    )
+    ru_title = clean_title_for_query(media_details.title) if media_details.title else None
+    en_title = clean_title_for_query(media_details.original_title) if media_details.original_title else None
 
     sorted_titles = sorted(list(titles))
     if not sorted_titles:
         return ""
 
-    # Prepare parts
-    combined_titles_part = (
-        f"({'|'.join(sorted_titles)})" if len(sorted_titles) > 1 else sorted_titles[0]
-    )
+    combined_titles_part = f"({'|'.join(sorted_titles)})" if len(sorted_titles) > 1 else sorted_titles[0]
 
     season_part = None
     if media_details.is_series and season_number:
         s_num = str(season_number)
-        season_variants = [
-            f"сезон {s_num}",
-            f"season {s_num}",
-            f"S{season_number:02d}",
-        ]
+        season_variants = [f"сезон {s_num}", f"season {s_num}", f"S{season_number:02d}"]
         season_part = f"({'|'.join(season_variants)})"
 
     year_part = None
-    if not media_details.is_series and media_details.year:
+    if media_details.is_series and season_year:
+        parsed_year = parse_year(season_year)
+        if parsed_year:
+            year_part = f"({parsed_year})"
+    elif not media_details.is_series and media_details.year:
         year_part = f"({media_details.year})"
 
-    # If no max_length limit, return the full query without truncation
     if max_length is None:
         return _construct_query(combined_titles_part, season_part, year_part)
 
-    # Strategy 1: Everything (Combined Titles + Season + Year)
     query = _construct_query(combined_titles_part, season_part, year_part)
     if len(query) <= max_length:
         return query
 
-    # Strategy 2: Combined Titles + Season (Drop Year)
     if year_part:
         query = _construct_query(combined_titles_part, season_part, None)
         if len(query) <= max_length:
             return query
 
-    # Strategy 3: Single Title (Russian preferred) + Season + Year
-    # If combined was too long, try just Russian
     if ru_title:
         query = _construct_query(ru_title, season_part, year_part)
         if len(query) <= max_length:
             return query
 
-    # Strategy 4: Single Title (Russian preferred) + Season (Drop Year)
     if ru_title and year_part:
         query = _construct_query(ru_title, season_part, None)
         if len(query) <= max_length:
             return query
 
-    # Strategy 5: Single Title (English preferred if we haven't tried or if RU failed) + Season + Year
     if en_title and en_title != ru_title:
         query = _construct_query(en_title, season_part, year_part)
         if len(query) <= max_length:
             return query
 
-    # Strategy 6: Single Title (English) + Season (Drop Year)
     if en_title and en_title != ru_title and year_part:
         query = _construct_query(en_title, season_part, None)
         if len(query) <= max_length:
             return query
 
-    # Strategy 7: Truncate Title (Last resort)
-    # Use the shortest available title or just truncate Russian
     target_title = ru_title or en_title or sorted_titles[0]
-    # Estimate available space
-    # query = title + " + " + season_part
-    # space = max_length - len(season_part) - 3
-
-    extras_len = 0
-    extras_parts = []
-    if season_part:
-        extras_parts.append(season_part)
-    # We probably dropped year already if we are here
-
-    extras_str = " + ".join(extras_parts)
-    if extras_str:
-        extras_len = len(extras_str) + 3  # " + "
-
+    extras_len = len(season_part) + 3 if season_part else 0
     available_for_title = max_length - extras_len
-    if (
-        available_for_title < 10
-    ):  # If almost no space, just return what we can, it will likely fail but better than error
+
+    if available_for_title < 10:
         return _construct_query(target_title, season_part, None)[:max_length]
 
     truncated_title = target_title[:available_for_title].strip()
@@ -251,14 +215,9 @@ def calculate_similarity(s1: str, s2: str) -> float:
 
 def extract_season_number(title: str) -> int | None:
     title_lower = title.lower()
-
-    # Patterns: "season X", "сезон X", "сезон: X", "X сезон", "sX"
-    # Rutracker often uses "Сезон: 2" format with colon
-    # Order matters: more specific patterns first to avoid false matches
-    # (e.g., "4 сезон: 1-10" should match "4", not "1")
     patterns = [
-        r"(\d+)\s*сезон",  # "4 сезон" - check this first to avoid matching episode numbers
-        r"(?:season|сезон)\s*:?\s*(\d+)",  # "season 2", "сезон 2", "сезон: 2"
+        r"(\d+)\s*сезон",
+        r"(?:season|сезон)\s*:?\s*(\d+)",
         r"\bs(\d+)",
     ]
 
@@ -293,18 +252,15 @@ def parse_year(year: int | str | None) -> int | None:
     if year is None:
         return None
     
-    # If already an integer, validate it's a reasonable year
     if isinstance(year, int):
         if 1900 <= year <= 2100:
             return year
         return None
     
-    # If string, extract first 4-digit year
     if isinstance(year, str):
         year_match = re.search(r'(\d{4})', str(year))
         if year_match:
             parsed_year = int(year_match.group(1))
-            # Validate it's a reasonable year
             if 1900 <= parsed_year <= 2100:
                 return parsed_year
     return None

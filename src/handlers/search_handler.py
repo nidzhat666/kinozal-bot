@@ -272,6 +272,7 @@ async def handle_season_selection(callback_query: CallbackQuery):
         back_button_text="⬅️ Назад к сезонам",
         media_details=movie_details,
         season_number=season_number,
+        season_year=season_year,
     )
     await callback_query.answer()
 
