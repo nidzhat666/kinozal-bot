@@ -10,10 +10,16 @@ services:
     image: nidzhat/kinozal_bot:latest
     restart: always
     env_file: .env
-    ports:
-      - "64873:8000"
     stdin_open: true # docker run -i
+    networks:
+      - nginx
+      - default
 
 volumes:
   cache:
     driver: local
+
+networks:
+  nginx:
+    name: nginx-network
+    external: true
