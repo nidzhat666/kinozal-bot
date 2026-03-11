@@ -5,6 +5,7 @@ services:
     command: redis-server --save 20 1 --loglevel warning
 
   bot:
+    container_name: kinozal_bot
     depends_on:
       - cache
     image: nidzhat/kinozal_bot:latest
