@@ -1,148 +1,124 @@
 # Kinozal Bot
 
-![Kinozal Bot Logo](screenshots/logo.png) <!-- Optional: Add a logo if available -->
+Telegram bot for searching movies and managing torrents. Searches movies via TMDB/Kinopoisk, downloads torrents from Kinozal/Rutracker, manages downloads through qBittorrent, and refreshes Plex library.
 
-A modern Telegram bot for movie enthusiasts! Search, download, and manage torrents seamlessly with integrations for Kinopoisk, TMDB, qBittorrent, and Plex.
+## Features
 
-## 🚀 What is Kinozal Bot?
+- Movie and TV series search (TMDB, Kinopoisk)
+- Smart torrent selection powered by Groq LLM
+- qBittorrent download management (start, pause, delete, status)
+- Plex library refresh after downloads
+- Two modes: polling (development) and webhook (production)
 
-Kinozal Bot is your personal movie assistant on Telegram. It allows you to:
+## Screenshots
 
-- Search for movies using popular databases like Kinopoisk and TMDB.
-- Find and download torrents from providers like Kinozal and Rutracker.
-- Manage your downloads via qBittorrent (start, pause, delete, check status).
-- Automatically refresh your Plex library after downloads.
+| Movie Search | Season Selection | Torrent List |
+|:---:|:---:|:---:|
+| ![](screenshots/search.png) | ![](screenshots/series_seasons.png) | ![](screenshots/torrents_list.png) |
 
-Built with **FastAPI** and **Aiogram**, it supports both long-polling (for development) and webhooks (for production).
+| Download | Management | Download Details |
+|:---:|:---:|:---:|
+| ![](screenshots/download.png) | ![](screenshots/management.png) | ![](screenshots/management_detail.png) |
 
-## ✨ Features
-
-- **Movie Search**: Quickly find movies with details like ratings, cast, and summaries.
-- **Smart Torrent Search**: Uses Groq LLMs to intelligently find and select the best torrents for each video quality, prioritizing those with the most seeds.
-- **Torrent Management**: Add, pause, resume, delete torrents, and view detailed statuses.
-- **Plex Integration**: Trigger library scans to update your media collection.
-- **Multi-Source Support**: Pull data from multiple torrent and movie info providers.
-- **Hybrid Architecture**: Runs on FastAPI, allowing for HTTP API extensions (metrics, health checks, webhooks).
-
-## 📸 Screenshots
-
-Here are some examples of how the bot works.
-
-![Movie Search](screenshots/search.png)
-
-*Searching for a movie and viewing results.*
-
-![Series Season Choice](screenshots/series_seasons.png)
-
-*Selecting a season to view episodes.*
-
-![Torrents List](screenshots/torrents_list.png)
-
-*Viewing available torrents for a movie.*
-
-![Torrent Download](screenshots/download.png)
-
-*Selecting and downloading a torrent.*
-
-![Torrent Management List](screenshots/management.png)
-![Torrent Management Detail](screenshots/management_detail.png)
-
-*Viewing torrent statuses and managing downloads.*
-
-![Plex Refresh](screenshots/plex_refresh.png)
-
-*Refreshing the Plex library after a download.*
-
-## 🛠️ Setup
-
-Follow these steps to get Kinozal Bot up and running.
+## Quick Start
 
 ### Prerequisites
 
 - Python 3.12+
-- Docker (optional but recommended)
-- Telegram Bot Token (from BotFather)
-- API keys for Kinopoisk, TMDB, etc.
-- qBittorrent and Plex setup
-- `uv` package manager (optional, but recommended)
+- [uv](https://docs.astral.sh/uv/) package manager
+- Docker and Docker Compose
+- Telegram Bot Token ([BotFather](https://t.me/BotFather))
+- qBittorrent with Web UI enabled
 
-### Installation
+### 1. Clone the repository
 
-1. **Clone the Repository**
+```bash
+git clone https://github.com/nidzhat/kinozal-bot.git
+cd kinozal-bot
+```
 
-   ```bash
-   git clone https://github.com/yourusername/kinozal-bot.git
-   cd kinozal-bot
-   ```
+### 2. Configure environment variables
 
-2. **Set Up Environment**
+```bash
+cp example.env .env
+```
 
-   Copy the example env file and fill in your details:
+Open `.env` and fill in the required variables:
 
-   ```bash
-   cp example.env .env
-   ```
+| Variable | Description | Required |
+|---|---|:---:|
+| `TELEGRAM_BOT_TOKEN` | Bot token from BotFather | yes |
+| `QBT_HOST` | qBittorrent Web UI address | yes |
+| `QBT_PORT` | qBittorrent Web UI port | yes |
+| `QBT_USERNAME` | qBittorrent login | yes |
+| `QBT_PASSWORD` | qBittorrent password | yes |
+| `TMDB_API_TOKEN` | TMDB API token | yes |
+| `KINOZAL_USERNAME` / `KINOZAL_PASSWORD` | Kinozal credentials | if `USE_KINOZAL=1` |
+| `RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD` | Rutracker credentials | if `USE_RUTRACKER=1` |
+| `GROQ_API_KEY` | Groq API key for smart torrent selection | no |
+| `KINOPOISK_API_KEY` | Kinopoisk API key | if `SEARCH_PROVIDER=kinopoisk` |
+| `PLEX_URL` / `PLEX_TOKEN` | Plex for library refresh | no |
 
-   Edit `.env` with your Telegram token, API keys, qBittorrent credentials, etc.
+### 3. Run locally
 
-3. **Install Dependencies**
+```bash
+uv sync
+uv run uvicorn src.bot.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-   Using uv (recommended):
+Make sure `USE_POLLING=true` is set in `.env` for local development.
 
-   ```bash
-   uv sync
-   ```
+### 4. Run qBittorrent (if you don't have one)
 
-### 🏃‍♂️ Running the Bot
+```bash
+docker compose -f docker-compose-qbt.yaml up -d
+```
 
-#### Local Development (Polling Mode)
+## Production
 
-To run the bot locally without setting up webhooks (ngrok not required):
+### Docker Compose
 
-1. Set `USE_POLLING=True` in your `.env` file.
-2. Run the server:
+```bash
+docker compose up -d --build
+```
 
-   ```bash
-   uv run uvicorn src.bot.main:app --reload --host 0.0.0.0 --port 8000
-   ```
-   
-   *Note: `--reload` enables auto-restart on code changes.*
+The bot is built from the Dockerfile and runs alongside Redis.
 
-#### Production (Webhook Mode)
+### Secrets via Infisical
 
-1. Ensure `USE_POLLING=False` (or remove it) in `.env`.
-2. Set `BASE_URL` to your public domain (e.g., `https://your-bot.com`).
-3. Run using Docker:
+In production, environment variables are fetched via [Infisical](https://infisical.com/) at container startup. Fill these in the `.env` on the server:
 
-   ```bash
-   docker-compose up -d --build
-   ```
+```
+INFISICAL_TOKEN=<machine identity token>
+PROJECT_ID=<infisical project id>
+INFISICAL_ENV=prod
+```
 
-   Or manually:
-   
-   ```bash
-   uv run uvicorn src.bot.main:app --host 0.0.0.0 --port 8000
-   ```
+All other secrets are stored in Infisical and injected automatically via `infisical run`.
 
-## 📖 How to Use
+### CI/CD
 
-1. **Start the Bot**: Send `/start` to initialize.
-2. **Search for Movies**: Use `/search movie_name` or the inline search.
-3. **View Details**: Select a movie to see more info.
-4. **Download Torrent**: Choose a torrent provider and start downloading.
-5. **Manage Torrents**: Use commands like `/status`.
-6. **Refresh Plex**: After download, use `/refresh_plex` to update your library.
+On push to `master`, GitHub Actions automatically:
+1. Copies project files to the server via SCP
+2. Builds the Docker image and restarts the container
 
-For more commands, check the bot's help menu with `/help`.
+## Bot Commands
 
-## 🤝 Contributing
+| Command | Description |
+|---|---|
+| `/start` | Start the bot |
+| `/search <title>` | Search for a movie or TV series |
+| `/status` | Check current download status |
+| `/refresh_plex` | Refresh Plex library |
+| `/help` | Show available commands |
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+## Tech Stack
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-Built with ❤️ by [Your Name]. If you have questions, reach out on Telegram or GitHub!
+- **Python 3.12**, **FastAPI**, **Aiogram 3**
+- **Redis** — caching
+- **qBittorrent** — torrent management
+- **Groq LLM** — smart torrent selection
+- **TMDB / Kinopoisk** — movie search
+- **Plex** — media server
+- **Infisical** — secrets management
+- **Docker Compose** — deployment

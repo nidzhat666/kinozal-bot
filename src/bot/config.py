@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-BOT_SERVER_PORT = os.getenv("BOT_SERVER_PORT")
 KINOZAL_CREDENTIALS = dict(
     username=os.getenv("KINOZAL_USERNAME"), password=os.getenv("KINOZAL_PASSWORD")
 )
