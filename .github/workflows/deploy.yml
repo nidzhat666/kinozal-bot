@@ -6,19 +6,22 @@ on:
       - master
 
 jobs:
-  docker-image-build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Build and Push Docker Image
-        run: |
-          docker build -t ${{ secrets.DOCKER_HUB_REPO }}:latest .
-          echo ${{ secrets.DOCKER_HUB_PASSWORD }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
-          docker push ${{ secrets.DOCKER_HUB_REPO }}:latest
+      - name: Upload files to server
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.INFISICAL_SERVER_HOST }}
+          username: ${{ secrets.INFISICAL_SERVER_USER }}
+          key: ${{ secrets.INFISICAL_SERVER_SSH_KEY }}
+          source: "src,Dockerfile,docker-compose.yaml,pyproject.toml,uv.lock"
+          target: ~/kinozal-bot
 
-      - name: Deploy to server
+      - name: Restart Docker Compose
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.INFISICAL_SERVER_HOST }}
@@ -26,6 +29,5 @@ jobs:
           key: ${{ secrets.INFISICAL_SERVER_SSH_KEY }}
           script: |
             cd ~/kinozal-bot
-            docker compose pull
             docker compose down
-            docker compose up -d
+            docker compose up -d --build
