@@ -10,7 +10,25 @@ services:
       - cache
     image: nidzhat/kinozal_bot:latest
     restart: always
-    env_file: .env
+    command:
+      - infisical
+      - run
+      - --domain=https://env.nidzh.com
+      - --projectId=${PROJECT_ID}
+      - --env=${INFISICAL_ENV}
+      - --
+      - uv
+      - run
+      - uvicorn
+      - bot.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+    environment:
+      - INFISICAL_TOKEN=${INFISICAL_TOKEN}
+    env_file:
+      - .env
     stdin_open: true # docker run -i
     networks:
       - nginx

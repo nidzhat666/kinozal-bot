@@ -4,17 +4,13 @@ on:
   push:
     branches:
       - master
-env:
-  env_var: ${{ vars.ENV_CONTEXT_VAR }}
-
 
 jobs:
-
   docker-image-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Build and Push Docker Image
         run: |
@@ -22,3 +18,14 @@ jobs:
           echo ${{ secrets.DOCKER_HUB_PASSWORD }} | docker login -u ${{ secrets.DOCKER_HUB_USERNAME }} --password-stdin
           docker push ${{ secrets.DOCKER_HUB_REPO }}:latest
 
+      - name: Deploy to server
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.INFISICAL_SERVER_HOST }}
+          username: ${{ secrets.INFISICAL_SERVER_USER }}
+          key: ${{ secrets.INFISICAL_SERVER_SSH_KEY }}
+          script: |
+            cd ~/kinozal-bot
+            docker compose pull
+            docker compose down
+            docker compose up -d
