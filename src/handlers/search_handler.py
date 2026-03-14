@@ -10,7 +10,7 @@ from bot.constants import (
     SEASON_SELECT_CALLBACK,
     SEARCH_MOVIE_CALLBACK,
 )
-from services.exceptions import KinopoiskApiError, NoResultsFoundError, TmdbApiError
+from services.exceptions import NoResultsFoundError, TmdbApiError
 from utilities import media_utils
 from utilities.handlers_utils import (
     check_action,
@@ -57,7 +57,7 @@ async def handle_search_query(message: Message):
         await status_message.edit_text(
             f"К сожалению, по запросу «{query}» ничего не найдено."
         )
-    except (KinopoiskApiError, TmdbApiError) as exc:
+    except TmdbApiError as exc:
         duration_ms = int((perf_counter() - started_at) * 1000)
         error_type = type(exc).__name__
         handler_logger.warning(
@@ -132,7 +132,7 @@ async def handle_media_results_list(callback_query: CallbackQuery):
         await callback_query.message.edit_text(
             f"По запросу «{query}» ничего не найдено."
         )
-    except (KinopoiskApiError, TmdbApiError):
+    except TmdbApiError:
         await callback_query.answer(
             "Сервис поиска временно недоступен.", show_alert=True
         )

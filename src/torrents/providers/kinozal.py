@@ -299,14 +299,7 @@ def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
         if imdb_span := imdb_anchor.find("span"):
             imdb_value = imdb_span.get_text(strip=True)
 
-    kinopoisk_value = "-"
-    if kinopoisk_anchor := soup.find(
-        "a", href=lambda href: href and "kinopoisk.ru" in href
-    ):
-        if kinopoisk_span := kinopoisk_anchor.find("span"):
-            kinopoisk_value = kinopoisk_span.get_text(strip=True)
-
-    return MovieRatings(imdb=imdb_value, kinopoisk=kinopoisk_value)
+    return MovieRatings(imdb=imdb_value)
 
 
 def _parse_torrent_details(soup: BeautifulSoup) -> list[TorrentDetails]:

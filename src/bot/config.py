@@ -28,16 +28,8 @@ REDIS_DB = os.getenv("REDIS_DB")
 PLEX_URL = os.getenv("PLEX_URL")
 PLEX_TOKEN = os.getenv("PLEX_TOKEN")
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-KINOPOISK_API_URL = os.getenv("KINOPOISK_API_URL", "https://api.poiskkino.dev/v1.4")
-KINOPOISK_API_KEY = os.getenv("KINOPOISK_API_KEY")
-KINOPOISK_SEARCH_LIMIT = int(os.getenv("KINOPOISK_SEARCH_LIMIT", 10))
-
 TMDB_API_URL = os.getenv("TMDB_API_URL", "https://api.themoviedb.org/3")
 TMDB_API_TOKEN = os.getenv("TMDB_API_TOKEN")
-
-SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "tmdb").lower()
 
 BASE_URL = os.getenv("BASE_URL")
 WEBHOOK_PATH = os.getenv("WEBHOOK_PATH", "/webhook")
@@ -54,4 +46,3 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_DEV_MODE = os.getenv("LOG_DEV_MODE", "False").lower() in ("true", "1", "yes")
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-TEMPLATES_DIR = os.path.join(BASE_DIR, "..", "templates")

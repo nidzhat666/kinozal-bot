@@ -10,12 +10,6 @@ class RutrackerApiError(Exception):
     pass
 
 
-class KinopoiskApiError(Exception):
-    """Custom exception for Kinopoisk API errors"""
-
-    pass
-
-
 class TmdbApiError(Exception):
     pass
 
@@ -27,7 +21,6 @@ class NoResultsFoundError(Exception):
 __all__ = [
     "KinozalApiError",
     "RutrackerApiError",
-    "KinopoiskApiError",
     "TmdbApiError",
     "NoResultsFoundError",
 ]

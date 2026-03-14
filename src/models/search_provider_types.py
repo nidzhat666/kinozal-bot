@@ -6,7 +6,6 @@ from pydantic import BaseModel, Field
 
 
 class Provider(str, Enum):
-    KINOPOISK = "kinopoisk"
     TMDB = "tmdb"
 
 

@@ -464,8 +464,7 @@ def format_movie_details_message(movie_details: MovieDetails) -> str:
         f"{bold('Режисер')}: {movie_details.director}<br/>"
         f"{bold('Актеры')}: {', '.join(movie_details.actors[:5])}<br/><br/>"
         f"{bold('Рейтинги')}:<br/>"
-        f"- IMDB: {code(movie_details.ratings.imdb)}<br/>"
-        f"- Kinopoisk: {code(movie_details.ratings.kinopoisk)}<br/><br/>"
+        f"- IMDB: {code(movie_details.ratings.imdb)}<br/><br/>"
     )
     
     # Build torrent details section

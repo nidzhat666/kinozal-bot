@@ -261,7 +261,6 @@ class VideoQuality(StrEnum):
 
 class MovieRatings(BaseModel):
     imdb: str = "-"
-    kinopoisk: str = "-"
 
 
 class TorrentDetails(BaseModel):

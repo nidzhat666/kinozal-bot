@@ -1,11 +1,10 @@
 # Kinozal Bot
 
-Telegram bot for searching movies and managing torrents. Searches movies via TMDB/Kinopoisk, downloads torrents from Kinozal/Rutracker, manages downloads through qBittorrent, and refreshes Plex library.
+Telegram bot for searching movies and managing torrents. Searches movies via TMDB, downloads torrents from Kinozal/Rutracker, manages downloads through qBittorrent, and refreshes Plex library.
 
 ## Features
 
-- Movie and TV series search (TMDB, Kinopoisk)
-- Smart torrent selection powered by Groq LLM
+- Movie and TV series search (TMDB)
 - qBittorrent download management (start, pause, delete, status)
 - Plex library refresh after downloads
 - Two modes: polling (development) and webhook (production)
@@ -55,8 +54,6 @@ Open `.env` and fill in the required variables:
 | `TMDB_API_TOKEN` | TMDB API token | yes |
 | `KINOZAL_USERNAME` / `KINOZAL_PASSWORD` | Kinozal credentials | if `USE_KINOZAL=1` |
 | `RUTRACKER_USERNAME` / `RUTRACKER_PASSWORD` | Rutracker credentials | if `USE_RUTRACKER=1` |
-| `GROQ_API_KEY` | Groq API key for smart torrent selection | no |
-| `KINOPOISK_API_KEY` | Kinopoisk API key | if `SEARCH_PROVIDER=kinopoisk` |
 | `PLEX_URL` / `PLEX_TOKEN` | Plex for library refresh | no |
 
 ### 3. Run locally
@@ -117,8 +114,7 @@ On push to `master`, GitHub Actions automatically:
 - **Python 3.12**, **FastAPI**, **Aiogram 3**
 - **Redis** — caching
 - **qBittorrent** — torrent management
-- **Groq LLM** — smart torrent selection
-- **TMDB / Kinopoisk** — movie search
+- **TMDB** — movie search
 - **Plex** — media server
 - **Infisical** — secrets management
 - **Docker Compose** — deployment

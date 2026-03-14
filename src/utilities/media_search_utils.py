@@ -15,7 +15,7 @@ from bot.constants import (
 )
 from models.movie_detail_service_types import MovieSearchResult
 from models.search_provider_types import MediaDetails, MediaItem
-from services.exceptions import KinopoiskApiError, NoResultsFoundError, TmdbApiError
+from services.exceptions import NoResultsFoundError, TmdbApiError
 from services.search_integrations.registry import get_search_provider
 from utilities.handlers_utils import redis_callback_get, redis_callback_save
 from utilities.logger_utils import get_logger
@@ -169,7 +169,7 @@ async def get_details_from_callback(
     try:
         search_provider = get_search_provider()
         return await search_provider.get_details(movie_id)
-    except (KinopoiskApiError, TmdbApiError) as exc:
+    except TmdbApiError as exc:
         logger.warning(
             "Failed to fetch details, falling back to cached data",
             movie_id=movie_id,
