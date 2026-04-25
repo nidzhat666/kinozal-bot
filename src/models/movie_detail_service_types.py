@@ -73,12 +73,12 @@ class VideoQuality(StrEnum):
         ❌ - Avoid: HDRip, WEBRip, DVDRip, 720p, SD (outdated/bad quality)
         """
         match self:
-            # 🥇 Gold - 4K WEB-DL, 4K WEBRip, WEB-DL 1080p
-            case VideoQuality.UHD_4K_WEB | VideoQuality.UHD_4K_WEBRIP | VideoQuality.FHD_1080P_WEB:
+            # 🥇 Gold - 4K WEB-DL, WEB-DL 1080p
+            case VideoQuality.UHD_4K_WEB | VideoQuality.FHD_1080P_WEB:
                 return "🥇"
 
-            # 🥈 Silver - BDRip 1080p
-            case VideoQuality.FHD_1080P_BDRIP:
+            # 🥈 Silver - 4K WEBRip, BDRip 1080p
+            case VideoQuality.UHD_4K_WEBRIP | VideoQuality.FHD_1080P_BDRIP:
                 return "🥈"
 
             # 🥉 Bronze - 4K variants (except REMUX and WEB-DL)

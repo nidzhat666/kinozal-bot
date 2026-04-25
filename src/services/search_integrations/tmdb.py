@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import httpx
+import structlog
 
 from bot.config import TMDB_API_TOKEN, TMDB_API_URL
 from models.search_provider_types import (
@@ -23,7 +23,7 @@ from models.tmdb_types import (
 from services.exceptions import TmdbApiError
 from services.search_integrations.interface import SearchProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class TmdbService(SearchProvider):
