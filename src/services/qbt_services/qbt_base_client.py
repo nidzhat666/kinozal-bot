@@ -1,9 +1,9 @@
 from time import perf_counter
 
-from aioqbt.client import create_client, APIClient
+from aioqbt.client import APIClient, create_client
 
-from utilities.qbt_utils import get_url
 from utilities.logger_utils import get_service_logger
+from utilities.qbt_utils import get_url
 
 logger = get_service_logger("qbt")
 

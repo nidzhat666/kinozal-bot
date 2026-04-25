@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 async def torrents_info(
     client: APIClient,
-    filter_: str = None,
-    sort: str = None,
+    filter_: str | None = None,
+    sort: str | None = None,
     reverse: bool = False,
     hashes: list | tuple = (),
 ) -> list[TorrentInfo]:
@@ -33,8 +33,8 @@ async def torrents_info(
 
 
 if __name__ == "__main__":
-    from services.qbt_services import get_client
     from bot.config import QBT_CREDENTIALS
+    from services.qbt_services import get_client
 
     async def main():
         async with await get_client(**QBT_CREDENTIALS) as qbt_client:

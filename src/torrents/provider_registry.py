@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
-from torrents.interfaces import TorrentProviderProtocol
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
+    from torrents.interfaces import TorrentProviderProtocol
 
 
 class TorrentProviderRegistry:
     def __init__(self) -> None:
         self._providers: dict[str, TorrentProviderProtocol] = {}
 
-    def register(
-        self, provider: TorrentProviderProtocol
-    ) -> None:
+    def register(self, provider: TorrentProviderProtocol) -> None:
         self._providers[provider.name] = provider
 
     def unregister(self, name: str) -> None:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
-from models.search_provider_types import MediaDetails, SearchResults
+if TYPE_CHECKING:
+    from models.search_provider_types import MediaDetails, SearchResults
 
 
 class SearchProvider(ABC):

@@ -1,6 +1,5 @@
 import asyncio
 
-
 from aiogram import Router
 from aiogram.types import CallbackQuery
 
@@ -8,9 +7,10 @@ from bot.config import QBT_CREDENTIALS
 from bot.constants import TORRENT_PAUSE_CALLBACK
 from services.qbt_services import get_client, pause_torrent
 from utilities.handlers_utils import check_action, redis_callback_get
-from .torrent_detailed_handler import handle_torrent_button, get_inline_keyboard
-
 from utilities.logger_utils import get_handler_logger
+
+from .torrent_detailed_handler import handle_torrent_button
+
 logger = get_handler_logger(__name__.split(".")[-1])
 router = Router(name=__name__)
 

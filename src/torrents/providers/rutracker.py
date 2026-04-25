@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,12 +11,12 @@ import httpx
 from bs4 import BeautifulSoup
 
 from bot.config import RUTRACKER_URL
-from services.exceptions import RutrackerApiError
 from models.movie_detail_service_types import (
     MovieDetails,
     MovieRatings,
     MovieSearchResult,
 )
+from services.exceptions import RutrackerApiError
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities.logger_utils import get_provider_logger
 
@@ -47,7 +48,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_start")
     logger.info("Authentication started")
-    
+
     username = credentials.get("username")
     password = credentials.get("password")
     url = get_url("/forum/login.php")
@@ -56,7 +57,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
         "login_password": password,
         "login": "%E2%F5%EE%E4",
     }
-    
+
     try:
         http_start = perf_counter()
         async with httpx.AsyncClient() as client:
@@ -97,7 +98,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
             exc_info=True,
         )
         raise RutrackerApiError(error_message) from exc
-    
+
     duration_ms = int((perf_counter() - started_at) * 1000)
     logger = logger.bind(operation="auth_success")
     logger.info("Authentication success", duration_ms=duration_ms)
@@ -187,9 +188,7 @@ async def _fetch_search_items(
     return _parse_search_results(html)
 
 
-async def _get_search_text(
-    query: str, credentials: dict[str, str] | None = None
-) -> str:
+async def _get_search_text(query: str, credentials: dict[str, str] | None = None) -> str:
     """Get HTML content from Rutracker search page."""
     cookies = await _build_auth_cookies(credentials)
     url = get_url("/forum/tracker.php")
@@ -281,7 +280,7 @@ async def _download_movie(
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
     logger.info("Download started", movie_id=str(movie_id))
-    
+
     cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/dl.php?t={movie_id}")
 
@@ -299,7 +298,7 @@ async def _download_movie(
                 status_code=response.status_code,
                 duration_ms=http_duration_ms,
             )
-            
+
             content_type = response.headers.get("content-type", "").lower()
             if "text/html" in content_type:
                 error_type = "DownloadError"
@@ -316,7 +315,7 @@ async def _download_movie(
                     error_message=error_message,
                 )
                 raise RutrackerApiError(error_message)
-            
+
             payload = response.content
     except httpx.HTTPError as exc:
         http_duration_ms = int((perf_counter() - http_start) * 1000)
@@ -337,7 +336,9 @@ async def _download_movie(
     if not payload or len(payload) < 10:
         duration_ms = int((perf_counter() - started_at) * 1000)
         error_type = "DownloadError"
-        error_message = f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
+        error_message = (
+            f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
+        )
         logger = logger.bind(operation="download_error")
         logger.error(
             "Download error",
@@ -366,9 +367,9 @@ async def _download_movie(
 
 def _remove_links_with_parents(soup: BeautifulSoup) -> None:
     """Remove all links (<a> tags) with their parent blocks until only text remains.
-    
+
     Iterates through all links, removes them, and then recursively removes
-    their parent containers if they become effectively empty (contain only 
+    their parent containers if they become effectively empty (contain only
     whitespace or common separators).
     """
     # Create a list copy to safely iterate while modifying the tree
@@ -376,25 +377,25 @@ def _remove_links_with_parents(soup: BeautifulSoup) -> None:
         # Skip if link is already removed
         if link.parent is None:
             continue
-            
+
         parent = link.parent
         link.decompose()
-        
+
         # Walk up the tree removing empty parents
         current = parent
         while current and current != soup:
             # Check for other significant tags
-            # We treat <br> as non-significant for container removal decision 
+            # We treat <br> as non-significant for container removal decision
             # if the text is also empty/separators
             has_significant_tags = False
             for child in current.find_all(recursive=False):
                 if child.name != "br":
                     has_significant_tags = True
                     break
-            
+
             if has_significant_tags:
                 break
-                
+
             # Check text content
             text = current.get_text(strip=True)
             # Allow removal if text is empty or consists only of separators
@@ -411,7 +412,7 @@ def _remove_links_with_parents(soup: BeautifulSoup) -> None:
 
 def _deduplicate_hr(soup: BeautifulSoup) -> None:
     """Remove duplicate <hr> tags (consecutive horizontal lines).
-    
+
     Removes an <hr> tag if:
     1. It follows immediately after another <hr> (ignoring whitespace).
     2. It is the first significant element in the container.
@@ -430,22 +431,22 @@ def _deduplicate_hr(soup: BeautifulSoup) -> None:
         prev_node = hr.previous_sibling
         while prev_node and is_empty_text(prev_node):
             prev_node = prev_node.previous_sibling
-        
+
         # 1. Remove if previous significant node is also hr
         if prev_node and prev_node.name == "hr":
             hr.decompose()
             continue
-            
+
         # 2. Remove if it's the first significant element (prev_node is None)
         if prev_node is None:
             hr.decompose()
             continue
-            
+
         # Check next sibling
         next_node = hr.next_sibling
         while next_node and is_empty_text(next_node):
             next_node = next_node.next_sibling
-            
+
         # 3. Remove if it's the last significant element (next_node is None)
         if next_node is None:
             hr.decompose()
@@ -458,11 +459,11 @@ def _extract_post_body_html(soup: BeautifulSoup) -> str | None:
     if not post_body:
         logger.warning("post_body element not found on page")
         return None
-    
+
     # Remove all elements with class="sp-wrap"
     for sp_wrap in post_body.find_all(class_="sp-wrap"):
         sp_wrap.decompose()
-    
+
     # Remove all links with their parent blocks
     _remove_links_with_parents(post_body)
 
@@ -475,15 +476,60 @@ def _clean_and_convert_html(html: str) -> str:
     # Define allowed tags for Telegram HTML
     # Based on Telegram's supported tags
     allowed_tags = [
-        "a", "b", "strong", "i", "em", "s", "strike", "del", "u", "ins",
-        "span", "tg-spoiler", "pre", "code", "details", "summary",
-        "br", "hr", "wbr", "ul", "ol", "li", "div", "p", "q", "blockquote",
-        "h1", "h2", "h3", "h4", "h5", "h6", "noscript", "cite", "var",
-        "progress", "meter", "kbd", "samp", "img", "tt", "input",
-        "footer", "header", "main", "nav", "section", "html", "body",
-        "output", "data", "time"
+        "a",
+        "b",
+        "strong",
+        "i",
+        "em",
+        "s",
+        "strike",
+        "del",
+        "u",
+        "ins",
+        "span",
+        "tg-spoiler",
+        "pre",
+        "code",
+        "details",
+        "summary",
+        "br",
+        "hr",
+        "wbr",
+        "ul",
+        "ol",
+        "li",
+        "div",
+        "p",
+        "q",
+        "blockquote",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "noscript",
+        "cite",
+        "var",
+        "progress",
+        "meter",
+        "kbd",
+        "samp",
+        "img",
+        "tt",
+        "input",
+        "footer",
+        "header",
+        "main",
+        "nav",
+        "section",
+        "html",
+        "body",
+        "output",
+        "data",
+        "time",
     ]
-    
+
     # Define allowed attributes
     allowed_attributes = {
         "a": ["href"],
@@ -496,7 +542,7 @@ def _clean_and_convert_html(html: str) -> str:
         "input": ["type", "value"],
         "blockquote": ["expandable"],
     }
-    
+
     # Clean HTML with bleach
     cleaned_html = bleach.clean(
         html,
@@ -504,12 +550,12 @@ def _clean_and_convert_html(html: str) -> str:
         attributes=allowed_attributes,
         strip=False,  # Don't strip whitespace to preserve layout
     )
-    
+
     # Deduplicate <hr> tags and fix formatting after cleaning
     try:
         soup = BeautifulSoup(cleaned_html, "html.parser")
         _deduplicate_hr(soup)
-        
+
         # Convert span.post-b to <b> tags for bold text (Rutracker style)
         for span in soup.find_all("span", class_="post-b"):
             bold_tag = soup.new_tag("b")
@@ -518,7 +564,7 @@ def _clean_and_convert_html(html: str) -> str:
             # But extend works fine here
             bold_tag.extend(span.contents)
             span.replace_with(bold_tag)
-            
+
         return str(soup)
     except Exception as exc:
         logger = get_provider_logger(PROVIDER_NAME).bind(operation="parse_error")
@@ -585,10 +631,8 @@ def _parse_search_results(html: str) -> list[_RawSearchItem]:
 
             peers = None
             if peers_cell:
-                try:
+                with contextlib.suppress(ValueError, AttributeError):
                     peers = int(peers_cell.get_text(strip=True))
-                except (ValueError, AttributeError):
-                    pass
 
             results.append(
                 _RawSearchItem(
@@ -685,16 +729,16 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         """Get detailed information about a torrent from Rutracker."""
         logger = get_provider_logger(PROVIDER_NAME).bind(operation="fetch_details")
         logger.debug("Fetching movie details", movie_id=str(movie_id))
-        
+
         try:
             html = await _fetch_torrent_page(movie_id, self._credentials)
             soup = BeautifulSoup(html, "html.parser")
             post_body_html = _extract_post_body_html(soup)
-            
+
             cleaned_html = None
             if post_body_html:
                 cleaned_html = _clean_and_convert_html(post_body_html)
-            
+
             title = ""
             title_tag = soup.find("h1")
             if title_tag:
@@ -703,7 +747,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
                     title = title_link.get_text(strip=True)
                 else:
                     title = title_tag.get_text(strip=True)
-            
+
             return MovieDetails(
                 name=title or f"Torrent {movie_id}",
                 year="",

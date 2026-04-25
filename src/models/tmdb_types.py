@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+if TYPE_CHECKING:
+    from datetime import date
 
 
 class TmdbBase(BaseModel):
@@ -28,6 +30,7 @@ class TmdbMovieSearchResult(TmdbSearchResult):
     media_type: str = "movie"
 
     @field_validator("release_date", mode="before")
+    @classmethod
     def validate_release_date(cls, v: str | None) -> str | None:
         if v == "":
             return None
@@ -41,6 +44,7 @@ class TmdbTVShowSearchResult(TmdbSearchResult):
     media_type: str = "tv"
 
     @field_validator("first_air_date", mode="before")
+    @classmethod
     def validate_first_air_date(cls, v: str | None) -> str | None:
         if v == "":
             return None
@@ -49,13 +53,12 @@ class TmdbTVShowSearchResult(TmdbSearchResult):
 
 class TmdbSearchResponse(TmdbBase):
     page: int
-    results: list[TmdbMovieSearchResult | TmdbTVShowSearchResult] = Field(
-        default_factory=list
-    )
+    results: list[TmdbMovieSearchResult | TmdbTVShowSearchResult] = Field(default_factory=list)
     total_pages: int = Field(alias="total_pages")
     total_results: int = Field(alias="total_results")
 
     @field_validator("results", mode="before")
+    @classmethod
     def validate_results(cls, v: list[dict[str, Any]]) -> list[dict[str, Any]]:
         validated_results = []
         for item in v:
@@ -89,10 +92,10 @@ class TmdbMovieDetails(TmdbMovieSearchResult):
 
 
 __all__ = [
-    "TmdbSearchResponse",
-    "TmdbMovieSearchResult",
-    "TmdbTVShowSearchResult",
-    "TmdbTVShowDetails",
     "TmdbMovieDetails",
+    "TmdbMovieSearchResult",
+    "TmdbSearchResponse",
     "TmdbSeason",
+    "TmdbTVShowDetails",
+    "TmdbTVShowSearchResult",
 ]

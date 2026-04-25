@@ -101,9 +101,7 @@ class TmdbService(SearchProvider):
 
         try:
             async with httpx.AsyncClient() as client:
-                response = await client.request(
-                    method, url, headers=headers, params=params
-                )
+                response = await client.request(method, url, headers=headers, params=params)
         except httpx.HTTPError as exc:
             message = f"TMDB request to {url} failed: {exc}"
             logger.error(message)
@@ -128,24 +126,18 @@ class TmdbService(SearchProvider):
             items.append(item)
         return SearchResults(results=items)
 
-    def _movie_search_result_to_media_item(
-        self, movie: TmdbMovieSearchResult
-    ) -> MediaItem:
+    def _movie_search_result_to_media_item(self, movie: TmdbMovieSearchResult) -> MediaItem:
         return MediaItem(
             provider_id=f"movie:{movie.id}",
             provider=Provider.TMDB,
             title=movie.title or "Без названия",
             original_title=movie.original_title,
             year=movie.release_date.year if movie.release_date else None,
-            poster_url=f"{self._image_base_url}{movie.poster_path}"
-            if movie.poster_path
-            else None,
+            poster_url=f"{self._image_base_url}{movie.poster_path}" if movie.poster_path else None,
             is_series=False,
         )
 
-    def _tv_show_search_result_to_media_item(
-        self, tv_show: TmdbTVShowSearchResult
-    ) -> MediaItem:
+    def _tv_show_search_result_to_media_item(self, tv_show: TmdbTVShowSearchResult) -> MediaItem:
         return MediaItem(
             provider_id=f"tv:{tv_show.id}",
             provider=Provider.TMDB,
@@ -158,18 +150,14 @@ class TmdbService(SearchProvider):
             is_series=True,
         )
 
-    def _to_media_details(
-        self, details: TmdbMovieDetails | TmdbTVShowDetails
-    ) -> MediaDetails:
+    def _to_media_details(self, details: TmdbMovieDetails | TmdbTVShowDetails) -> MediaDetails:
         if isinstance(details, TmdbMovieDetails):
             return self._movie_details_to_media_details(details)
         if isinstance(details, TmdbTVShowDetails):
             return self._tv_show_details_to_media_details(details)
         raise TypeError(f"Unsupported details type: {type(details)}")
 
-    def _movie_details_to_media_details(
-        self, details: TmdbMovieDetails
-    ) -> MediaDetails:
+    def _movie_details_to_media_details(self, details: TmdbMovieDetails) -> MediaDetails:
         base = self._movie_search_result_to_media_item(details)
         return MediaDetails(
             **base.model_dump(),
@@ -177,9 +165,7 @@ class TmdbService(SearchProvider):
             seasons=[],
         )
 
-    def _tv_show_details_to_media_details(
-        self, details: TmdbTVShowDetails
-    ) -> MediaDetails:
+    def _tv_show_details_to_media_details(self, details: TmdbTVShowDetails) -> MediaDetails:
         base = self._tv_show_search_result_to_media_item(details)
         seasons = [
             SeasonDetails(

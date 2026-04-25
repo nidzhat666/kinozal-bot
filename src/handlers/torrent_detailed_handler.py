@@ -1,34 +1,33 @@
-
-
 from aiogram import Router
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 from aioqbt.api import TorrentInfo, TorrentState
 
 from bot.config import QBT_CREDENTIALS
 from bot.constants import (
-    TORRENT_DETAILED_CALLBACK,
-    TORRENT_START_CALLBACK,
-    TORRENT_PAUSE_CALLBACK,
-    TORRENT_DELETE_CALLBACK,
     REFRESH_CALLBACK,
+    TORRENT_DELETE_CALLBACK,
+    TORRENT_DETAILED_CALLBACK,
+    TORRENT_PAUSE_CALLBACK,
+    TORRENT_START_CALLBACK,
 )
 from services.qbt_services import get_client
 from services.qbt_services.qbt_torrent_details import get_torrent_details
 from utilities.format_utils import (
-    format_size,
-    format_percentage,
-    format_speed,
     format_date,
     format_eta,
+    format_percentage,
+    format_size,
+    format_speed,
 )
 from utilities.handlers_utils import (
     check_action,
     redis_callback_get,
     redis_callback_save,
 )
+from utilities.logger_utils import get_handler_logger
 
 router = Router(name=__name__)
-from utilities.logger_utils import get_handler_logger
+
 logger = get_handler_logger(__name__.split(".")[-1])
 
 

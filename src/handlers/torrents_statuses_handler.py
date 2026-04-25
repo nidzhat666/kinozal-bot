@@ -1,16 +1,17 @@
+from math import floor
+
 from aiogram import Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command
 from aiogram.types import (
-    Message,
+    CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    CallbackQuery,
+    Message,
 )
-from math import floor
 
 from bot.config import QBT_CREDENTIALS
-from bot.constants import STATUS_COMMAND, REFRESH_CALLBACK, TORRENT_DETAILED_CALLBACK
+from bot.constants import REFRESH_CALLBACK, STATUS_COMMAND, TORRENT_DETAILED_CALLBACK
 from services.qbt_services import get_client
 from services.qbt_services.qbt_status import torrents_info
 from utilities.common import truncate_string
@@ -58,16 +59,10 @@ def get_inline_keyboard(torrents):
             {"action": TORRENT_DETAILED_CALLBACK, "torrent_hash": torrent.hash}
         )
         buttons.append(
-            [
-                InlineKeyboardButton(
-                    text=format_status_message(torrent), callback_data=callback_data
-                )
-            ]
+            [InlineKeyboardButton(text=format_status_message(torrent), callback_data=callback_data)]
         )
 
-    buttons.append(
-        [InlineKeyboardButton(text="Refresh All", callback_data=REFRESH_CALLBACK)]
-    )
+    buttons.append([InlineKeyboardButton(text="Refresh All", callback_data=REFRESH_CALLBACK)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -83,9 +78,7 @@ async def refresh_status_message(callback_query: CallbackQuery):
     torrents = await get_torrents()
     keyboard = get_inline_keyboard(torrents)
     try:
-        await callback_query.message.edit_text(
-            "Select a torrent:", reply_markup=keyboard
-        )
+        await callback_query.message.edit_text("Select a torrent:", reply_markup=keyboard)
     except TelegramBadRequest:
         logger.info("Status hasn't changed.")
         await callback_query.answer("Status hasn't changed.")

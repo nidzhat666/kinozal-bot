@@ -23,3 +23,57 @@ dependencies = [
     "sulguk>=0.11.0",
     "uvicorn[standard]>=0.40.0",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "F",      # Pyflakes — unused imports, undefined names, etc.
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "I",      # isort — import sorting
+    "UP",     # pyupgrade — modern Python syntax
+    "B",      # flake8-bugbear — common pitfalls
+    "SIM",    # flake8-simplify — simplifiable code
+    "RUF",    # Ruff-specific rules
+    "N",      # pep8-naming
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie — misc lints
+    "PT",     # flake8-pytest-style
+    "RET",    # flake8-return
+    "TCH",    # flake8-type-checking — move imports to TYPE_CHECKING
+    "TID",    # flake8-tidy-imports
+    "ICN",    # flake8-import-conventions
+]
+ignore = [
+    "E501",   # line length — handled by formatter
+    "RET504", # unnecessary assignment before return
+    "SIM108", # ternary instead of if-else — can hurt readability
+    "RUF001", # ambiguous unicode — false positives on Cyrillic text
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/bot/main.py" = ["E402"]  # imports after setup_logging() is intentional
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "bot",
+    "handlers",
+    "models",
+    "services",
+    "torrents",
+    "utilities",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

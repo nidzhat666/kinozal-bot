@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Provider(str, Enum):
+class Provider(StrEnum):
     TMDB = "tmdb"
 
 
@@ -35,9 +35,9 @@ class SearchResults(BaseModel):
 
 
 __all__ = [
-    "Provider",
-    "MediaItem",
     "MediaDetails",
-    "SeasonDetails",
+    "MediaItem",
+    "Provider",
     "SearchResults",
+    "SeasonDetails",
 ]

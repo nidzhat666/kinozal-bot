@@ -12,11 +12,7 @@ async def get_torrent_details(client: APIClient, torrent_hash: str) -> TorrentIn
     """Retrieves the details for a single torrent."""
     async with client:
         torrent = next(
-            iter(
-                await torrents_info(
-                    client, filter_=torrent_hash, hashes=(torrent_hash,)
-                )
-            ),
+            iter(await torrents_info(client, filter_=torrent_hash, hashes=(torrent_hash,))),
             None,
         )
         return torrent

@@ -1,33 +1,35 @@
 import asyncio
+import contextlib
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 # Initialize logging configuration FIRST
 from bot.logger_config import setup_logging
+
 setup_logging()
 
 import structlog
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand, Update
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from sulguk import AiogramSulgukMiddleware
 
 from bot.config import (
-    TELEGRAM_BOT_TOKEN,
     BASE_URL,
-    WEBHOOK_PATH,
+    TELEGRAM_BOT_TOKEN,
     USE_POLLING,
+    WEBHOOK_PATH,
 )
 from bot.constants import REFRESH_PLEX_COMMAND, STATUS_COMMAND
 from handlers import (
-    search_handler,
-    movie_download_handler,
-    torrents_statuses_handler,
-    torrent_detailed_handler,
-    pause_torrent_handler,
-    start_torrent_handler,
     delete_torrent_handler,
+    movie_download_handler,
+    pause_torrent_handler,
     refresh_plex_handler,
+    search_handler,
+    start_torrent_handler,
+    torrent_detailed_handler,
+    torrents_statuses_handler,
 )
 
 logger = structlog.get_logger(__name__)
@@ -59,14 +61,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # Startup
     logger.info("Starting up application...")
-    
+
     # Set bot commands for menu
     await bot.set_my_commands(
         [
             BotCommand(command=f"/{STATUS_COMMAND}", description="qBittorrent Status"),
-            BotCommand(
-                command=f"/{REFRESH_PLEX_COMMAND}", description="Refresh Plex libraries"
-            ),
+            BotCommand(command=f"/{REFRESH_PLEX_COMMAND}", description="Refresh Plex libraries"),
         ]
     )
 
@@ -89,18 +89,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Shutdown
     logger.info("Shutting down application...")
-    
+
     if polling_task:
         logger.info("Stopping polling task...")
         polling_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await polling_task
-        except asyncio.CancelledError:
-            pass
     else:
         logger.info("Deleting webhook...")
         await bot.delete_webhook()
-        
+
     await bot.session.close()
     logger.info("Bot session closed.")
 

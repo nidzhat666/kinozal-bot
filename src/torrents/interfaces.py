@@ -13,20 +13,20 @@ class DownloadResult:
         *,
         file_path: str | None = None,
         filename: str | None = None,
-        magnet_link: str | None = None
+        magnet_link: str | None = None,
     ) -> None:
         self.file_path = file_path
         self.filename = filename
         self.magnet_link = magnet_link
 
 
-
 class TorrentProviderProtocol(Protocol):
     """Protocol for torrent provider implementations.
-    
+
     All torrent providers must implement this interface to ensure
     compatibility with the bot's torrent search and download system.
     """
+
     name: str
     base_url: str
     max_query_length: int | None
@@ -49,10 +49,10 @@ class TorrentProviderProtocol(Protocol):
 
     def get_torrent_url(self, movie_id: int | str) -> str:
         """Get the full URL to the torrent page on the tracker.
-        
+
         Args:
             movie_id: The torrent ID on the tracker
-            
+
         Returns:
             Full URL to the torrent page
         """

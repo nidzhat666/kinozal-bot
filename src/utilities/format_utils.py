@@ -41,8 +41,8 @@ def sanitize_fs_name(name: str, max_length: int = 180) -> str:
     name = re.sub(r"[\x00-\x1f]", "", name)
     name = re.sub(r"\s+", " ", name).strip()
     name = name.rstrip(".")
-    
+
     if len(name) > max_length:
         name = name[:max_length].strip()
-        
+
     return name

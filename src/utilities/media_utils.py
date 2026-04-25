@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import re
 from difflib import SequenceMatcher
+from typing import TYPE_CHECKING
 
-from models.search_provider_types import MediaDetails
 from models.movie_detail_service_types import VideoQuality
 from utilities.logger_utils import get_logger
+
+if TYPE_CHECKING:
+    from models.search_provider_types import MediaDetails
 
 logger = get_logger(__name__)
 
@@ -25,13 +28,19 @@ def build_torrent_query_from_media_details(
         titles.add(clean_title_for_query(media_details.original_title))
 
     ru_title = clean_title_for_query(media_details.title) if media_details.title else None
-    en_title = clean_title_for_query(media_details.original_title) if media_details.original_title else None
+    en_title = (
+        clean_title_for_query(media_details.original_title)
+        if media_details.original_title
+        else None
+    )
 
-    sorted_titles = sorted(list(titles))
+    sorted_titles = sorted(titles)
     if not sorted_titles:
         return ""
 
-    combined_titles_part = f"({'|'.join(sorted_titles)})" if len(sorted_titles) > 1 else sorted_titles[0]
+    combined_titles_part = (
+        f"({'|'.join(sorted_titles)})" if len(sorted_titles) > 1 else sorted_titles[0]
+    )
 
     season_part = None
     if media_details.is_series and season_number:
@@ -90,9 +99,7 @@ def build_torrent_query_from_media_details(
     return _construct_query(truncated_title, season_part, None)
 
 
-def _construct_query(
-    title_part: str, season_part: str | None, year_part: str | None
-) -> str:
+def _construct_query(title_part: str, season_part: str | None, year_part: str | None) -> str:
     parts = [title_part]
     if season_part:
         parts.append(season_part)
@@ -108,34 +115,33 @@ def clean_title_for_query(title: str) -> str:
 
 def parse_video_quality(name: str) -> str | None:
     """Parse video quality from torrent name.
-    
+
     Priority order (as per requirements):
     1. BDRemux/UHD BDRemux/Remux
     2. WEB-DL/WEBRip/WEB-DLRip
     3. BDRip/BluRay
     4. HDRip/HDTVRip/TVRip
     5. DVDRip/DVD9
-    
+
     Important: HDRip can NEVER be 4K HDR DV, even if HDR/DV keywords are present.
     HDR/DV are attributes/flags, not quality classes.
     """
     name_lower = name.lower()
-    
+
     # Check for HDRip keyword - if present, 4K HDR DV/HDR can't match
     has_hdrip_keyword = "hdrip" in name_lower or "hd-rip" in name_lower or "hd rip" in name_lower
-    
+
     # Priority order: BDRemux → WEB-DL/WEBRip → BDRip/BluRay → HDRip → DVDRip
     priority_order = [
         # REMUX variants (highest priority)
         VideoQuality.UHD_4K_REMUX,
         VideoQuality.FHD_1080P_REMUX,
-        
         # WEB-DL/WEBRip variants (high priority)
         VideoQuality.UHD_4K_WEB,  # 4K WEB-DL (highest priority among WEB-DL)
+        VideoQuality.UHD_4K_WEBRIP,  # 4K WEBRip
         VideoQuality.FHD_1080P_WEB,
         VideoQuality.HD_720P_WEB,
         VideoQuality.WEBRIP,  # WEBRip with or without resolution
-        
         # BDRip/BluRay variants
         VideoQuality.UHD_4K_BDRIP,
         VideoQuality.FHD_1080P_BLURAY,
@@ -143,10 +149,8 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.HD_720P_BLURAY,
         VideoQuality.HD_720P_BDRIP,
         VideoQuality.BDRIP,  # Generic BDRip
-        
         # HDRip/HDTVRip (before generic resolutions)
         VideoQuality.HDRIP,
-        
         # Generic resolutions (check after source-based)
         VideoQuality.UHD_4K,
         VideoQuality.FHD_1080P,
@@ -154,21 +158,22 @@ def parse_video_quality(name: str) -> str | None:
         VideoQuality.HD_720P,
         VideoQuality.SD_576P,
         VideoQuality.SD_480P,
-        
         # DVDRip (low priority)
         VideoQuality.DVDRIP,
-        
         # 4K HDR variants (check last, and only if NOT HDRip)
         # These are treated as attributes/flags, not primary quality classes
         VideoQuality.UHD_4K_HDR_DV,  # Only if not HDRip
-        VideoQuality.UHD_4K_HDR,    # Only if not HDRip
+        VideoQuality.UHD_4K_HDR,  # Only if not HDRip
     ]
-    
+
     for quality in priority_order:
         # Special handling: 4K HDR DV/HDR can't be HDRip
-        if has_hdrip_keyword and quality in (VideoQuality.UHD_4K_HDR_DV, VideoQuality.UHD_4K_HDR):
+        if has_hdrip_keyword and quality in (
+            VideoQuality.UHD_4K_HDR_DV,
+            VideoQuality.UHD_4K_HDR,
+        ):
             continue
-        
+
         if _matches_quality_rules(name_lower, quality.match_rules):
             # Log when quality is mapped to generic "4K" or "1080p" without source specification
             # This helps identify cases where mapping might be incorrect
@@ -180,7 +185,7 @@ def parse_video_quality(name: str) -> str | None:
                     torrent_name=name,
                 )
             return quality
-    
+
     op_logger = logger.bind(component="utility", operation="parse_quality")
     op_logger.warning("Unknown video quality in torrent name", name=name)
     return None
@@ -188,7 +193,7 @@ def parse_video_quality(name: str) -> str | None:
 
 def _matches_quality_rules(name: str, rules: list[tuple[list[str], list[str]]]) -> bool:
     """Check if name matches any of the quality rules.
-    
+
     Each rule is (required_all, required_any):
     - All keywords in required_all must be present
     - At least one keyword from required_any must be present (if not empty)
@@ -197,15 +202,15 @@ def _matches_quality_rules(name: str, rules: list[tuple[list[str], list[str]]]) 
         # Check all required keywords are present
         if not all(kw in name for kw in required_all):
             continue
-        
+
         # If required_any is empty, rule matches
         if not required_any:
             return True
-        
+
         # Check at least one of required_any is present
         if any(kw in name for kw in required_any):
             return True
-    
+
     return False
 
 
@@ -235,13 +240,13 @@ def is_season_match(title: str, target_season: int) -> bool:
 
 def parse_year(year: int | str | None) -> int | None:
     """Parse and validate year from various formats.
-    
+
     Extracts a 4-digit year from string or returns integer year.
     Returns None if year cannot be reliably determined.
-    
+
     This function ensures that non-numeric values (like director names)
     are not used as years in file naming.
-    
+
     Examples:
         - "2024" -> 2024
         - "1999-2004" -> 1999
@@ -251,14 +256,14 @@ def parse_year(year: int | str | None) -> int | None:
     """
     if year is None:
         return None
-    
+
     if isinstance(year, int):
         if 1900 <= year <= 2100:
             return year
         return None
-    
+
     if isinstance(year, str):
-        year_match = re.search(r'(\d{4})', str(year))
+        year_match = re.search(r"(\d{4})", str(year))
         if year_match:
             parsed_year = int(year_match.group(1))
             if 1900 <= parsed_year <= 2100:
@@ -268,10 +273,10 @@ def parse_year(year: int | str | None) -> int | None:
 
 __all__ = [
     "build_torrent_query_from_media_details",
-    "clean_title_for_query",
-    "parse_video_quality",
     "calculate_similarity",
+    "clean_title_for_query",
     "extract_season_number",
     "is_season_match",
+    "parse_video_quality",
     "parse_year",
 ]

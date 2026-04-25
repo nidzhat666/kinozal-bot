@@ -129,7 +129,7 @@ async def _get_text(path: str, *, params: dict[str, str | int] | None = None) ->
     url = get_url(path)
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
     start_time = perf_counter()
-    
+
     try:
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(url, params=params)
@@ -143,7 +143,9 @@ async def _get_text(path: str, *, params: dict[str, str | int] | None = None) ->
             )
             if response.status_code != 200:
                 error_type = "HTTPError"
-                error_message = f"Kinozal request to {response.url} failed with status {response.status_code}."
+                error_message = (
+                    f"Kinozal request to {response.url} failed with status {response.status_code}."
+                )
                 logger = logger.bind(operation="http_error")
                 logger.error(
                     "HTTP error",
@@ -224,7 +226,7 @@ def _parse_movie_details(html: str, movie_id: int | str) -> MovieDetails:
             ratings=_parse_ratings(soup),
             torrent_details=_parse_torrent_details(soup),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         error_type = type(exc).__name__
         error_message = f"Error parsing Kinozal movie detail results: {exc}"
         logger = logger.bind(operation="parse_error")
@@ -295,9 +297,10 @@ def _parse_image_url(soup: BeautifulSoup) -> str:
 
 def _parse_ratings(soup: BeautifulSoup) -> MovieRatings:
     imdb_value = "-"
-    if imdb_anchor := soup.find("a", href=lambda href: href and "imdb.com" in href):
-        if imdb_span := imdb_anchor.find("span"):
-            imdb_value = imdb_span.get_text(strip=True)
+    if (imdb_anchor := soup.find("a", href=lambda href: href and "imdb.com" in href)) and (
+        imdb_span := imdb_anchor.find("span")
+    ):
+        imdb_value = imdb_span.get_text(strip=True)
 
     return MovieRatings(imdb=imdb_value)
 
@@ -341,8 +344,6 @@ def _extract_span_text(soup: BeautifulSoup, label: str) -> str:
     return sibling.strip() if isinstance(sibling, str) else ""
 
 
-
-
 async def _download_movie(
     movie_id: int | str,
     credentials: dict[str, str],
@@ -350,7 +351,7 @@ async def _download_movie(
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
     logger.info("Download started", movie_id=str(movie_id))
-    
+
     cookies = await _authenticate(credentials)
     url = get_url(f"/download.php?id={movie_id}")
 
@@ -431,7 +432,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_start")
     logger.info("Authentication started")
-    
+
     username = credentials.get("username")
     password = credentials.get("password")
     if not username or not password:
@@ -474,7 +475,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
                     error_message=error_message,
                 )
                 raise KinozalApiError(error_message)
-            
+
             # Extract cookies from response and client cookie jar
             cookies = {}
             for cookie_name, cookie_value in response.cookies.items():
@@ -484,7 +485,7 @@ async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
                 cookies.update(client_cookies)
             except (AttributeError, TypeError, ValueError):
                 try:
-                    if hasattr(client.cookies, 'jar'):
+                    if hasattr(client.cookies, "jar"):
                         for cookie in client.cookies.jar:
                             cookies[cookie.name] = cookie.value
                 except (AttributeError, TypeError):

@@ -1,13 +1,9 @@
 class KinozalApiError(Exception):
     """Custom exception for search errors"""
 
-    pass
-
 
 class RutrackerApiError(Exception):
     """Custom exception for search errors"""
-
-    pass
 
 
 class TmdbApiError(Exception):
@@ -20,7 +16,7 @@ class NoResultsFoundError(Exception):
 
 __all__ = [
     "KinozalApiError",
+    "NoResultsFoundError",
     "RutrackerApiError",
     "TmdbApiError",
-    "NoResultsFoundError",
 ]

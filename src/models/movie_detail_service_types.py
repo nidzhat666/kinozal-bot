@@ -9,9 +9,10 @@ class VideoQuality(StrEnum):
     UHD_4K_WEB = "4K WEB-DL"
     UHD_4K_HDR_DV = "4K HDR DV"
     UHD_4K_HDR = "4K HDR"
+    UHD_4K_WEBRIP = "4K WEBRip"
     UHD_4K_BDRIP = "4K BDRip"
     UHD_4K = "4K"
-    
+
     # 1080p variants
     FHD_1080P_REMUX = "1080p REMUX"
     FHD_1080P_BLURAY = "1080p BluRay"
@@ -19,17 +20,17 @@ class VideoQuality(StrEnum):
     FHD_1080P_BDRIP = "1080p BDRip"
     FHD_1080P = "1080p"
     HD_1080I = "1080i"
-    
+
     # 720p variants
     HD_720P_BLURAY = "720p BluRay"
     HD_720P_WEB = "720p WEB-DL"
     HD_720P_BDRIP = "720p BDRip"
     HD_720P = "720p"
-    
+
     # SD variants
     SD_576P = "576p"
     SD_480P = "480p"
-    
+
     # Source-based (when resolution unclear)
     BDRIP = "BDRip"
     HDRIP = "HDRip"
@@ -39,7 +40,7 @@ class VideoQuality(StrEnum):
     @property
     def priority(self) -> int:
         """Return priority for sorting (lower number = better quality).
-        
+
         Priority is based on emoji rating:
         🥇 (Gold) = 0 (best)
         🥈 (Silver) = 1
@@ -50,22 +51,21 @@ class VideoQuality(StrEnum):
         emoji = self.rating_emoji
         if emoji == "🥇":
             return 0
-        elif emoji == "🥈":
+        if emoji == "🥈":
             return 1
-        elif emoji == "🥉":
+        if emoji == "🥉":
             return 2
-        elif emoji == "⚠️":
+        if emoji == "⚠️":
             return 3
-        elif emoji == "❌":
+        if emoji == "❌":
             return 4
-        else:
-            # Unknown/❓ - treat as worst
-            return 999
+        # Unknown/❓ - treat as worst
+        return 999
 
     @property
     def rating_emoji(self) -> str:
         """Return quality rating emoji based on preference ranking.
-        
+
         🥇 - Gold: 4K WEB-DL, WEB-DL 1080p (best choice)
         🥈 - Silver: BDRip 1080p, BluRay 1080p (great quality)
         🥉 - Bronze: 4K BDRip (optional, bigger size)
@@ -73,8 +73,8 @@ class VideoQuality(StrEnum):
         ❌ - Avoid: HDRip, WEBRip, DVDRip, 720p, SD (outdated/bad quality)
         """
         match self:
-            # 🥇 Gold - 4K WEB-DL, WEB-DL 1080p
-            case VideoQuality.UHD_4K_WEB | VideoQuality.FHD_1080P_WEB:
+            # 🥇 Gold - 4K WEB-DL, 4K WEBRip, WEB-DL 1080p
+            case VideoQuality.UHD_4K_WEB | VideoQuality.UHD_4K_WEBRIP | VideoQuality.FHD_1080P_WEB:
                 return "🥇"
 
             # 🥈 Silver - BDRip 1080p
@@ -82,34 +82,32 @@ class VideoQuality(StrEnum):
                 return "🥈"
 
             # 🥉 Bronze - 4K variants (except REMUX and WEB-DL)
-            case (
-            VideoQuality.UHD_4K
-            | VideoQuality.UHD_4K_HDR
-            | VideoQuality.UHD_4K_BDRIP
-            ):
+            case VideoQuality.UHD_4K | VideoQuality.UHD_4K_HDR | VideoQuality.UHD_4K_BDRIP:
                 return "🥉"
 
             # ⚠️ Caution - REMUX (huge files)
-            case (VideoQuality.UHD_4K_REMUX
-                  | VideoQuality.FHD_1080P_REMUX
-                  | VideoQuality.FHD_1080P_BLURAY
-                  | VideoQuality.UHD_4K_HDR_DV):
+            case (
+                VideoQuality.UHD_4K_REMUX
+                | VideoQuality.FHD_1080P_REMUX
+                | VideoQuality.FHD_1080P_BLURAY
+                | VideoQuality.UHD_4K_HDR_DV
+            ):
                 return "⚠️"
 
             # ❌ Avoid - HDRip, WEBRip, DVDRip, 720p, SD, generic
             case (
-            VideoQuality.HDRIP
-            | VideoQuality.WEBRIP
-            | VideoQuality.DVDRIP
-            | VideoQuality.HD_720P
-            | VideoQuality.HD_720P_BLURAY
-            | VideoQuality.HD_720P_WEB
-            | VideoQuality.HD_720P_BDRIP
-            | VideoQuality.SD_576P
-            | VideoQuality.SD_480P
-            | VideoQuality.HD_1080I
-            | VideoQuality.FHD_1080P
-            | VideoQuality.BDRIP
+                VideoQuality.HDRIP
+                | VideoQuality.WEBRIP
+                | VideoQuality.DVDRIP
+                | VideoQuality.HD_720P
+                | VideoQuality.HD_720P_BLURAY
+                | VideoQuality.HD_720P_WEB
+                | VideoQuality.HD_720P_BDRIP
+                | VideoQuality.SD_576P
+                | VideoQuality.SD_480P
+                | VideoQuality.HD_1080I
+                | VideoQuality.FHD_1080P
+                | VideoQuality.BDRIP
             ):
                 return "❌"
 
@@ -118,7 +116,7 @@ class VideoQuality(StrEnum):
     @property
     def match_rules(self) -> list[tuple[list[str], list[str]]]:
         """Returns list of (required_all, required_any) tuples.
-        
+
         A rule matches if ALL keywords from required_all are present
         AND AT LEAST ONE keyword from required_any is present.
         If required_any is empty, only required_all is checked.
@@ -136,6 +134,11 @@ class VideoQuality(StrEnum):
                     (["2160p"], ["web-dl", "webdl"]),
                     (["4k"], ["web-dl", "webdl"]),
                     (["uhd"], ["web-dl", "webdl"]),
+                ]
+            case VideoQuality.UHD_4K_WEBRIP:
+                return [
+                    (["webrip"], ["2160p", "4k", "uhd"]),
+                    (["web-rip"], ["2160p", "4k", "uhd"]),
                 ]
             case VideoQuality.UHD_4K_HDR_DV:
                 return [
@@ -168,7 +171,7 @@ class VideoQuality(StrEnum):
                     (["4k"], []),
                     (["uhd"], []),
                 ]
-            
+
             # 1080p variants
             case VideoQuality.FHD_1080P_REMUX:
                 return [
@@ -197,7 +200,7 @@ class VideoQuality(StrEnum):
                 return [
                     (["1080i"], []),
                 ]
-            
+
             # 720p variants
             case VideoQuality.HD_720P_BLURAY:
                 return [
@@ -216,7 +219,7 @@ class VideoQuality(StrEnum):
                 return [
                     (["720p"], []),
                 ]
-            
+
             # SD variants
             case VideoQuality.SD_576P:
                 return [
@@ -228,7 +231,7 @@ class VideoQuality(StrEnum):
                     (["480p"], []),
                     (["480i"], []),
                 ]
-            
+
             # Source-based fallbacks
             case VideoQuality.BDRIP:
                 return [

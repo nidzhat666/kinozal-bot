@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 class TorrentStructure(Enum):
     """Torrent file structure type."""
+
     SINGLE_FILE = "single_file"
     FOLDER_ROOT = "folder_root"
     MIXED_ROOT = "mixed_root"
@@ -22,6 +23,7 @@ class TorrentStructure(Enum):
 @dataclass
 class TorrentRenameInfo:
     """Information needed to rename a torrent."""
+
     structure: TorrentStructure
     old_name: str
     new_name: str
@@ -51,11 +53,11 @@ async def add_torrent_and_rename(
         before_hashes = await _get_torrent_hashes(client)
 
         await _add_torrent(client, torrent_file_path, category, torrent_name)
-        
+
         if not original_title:
             logger.info("No original title provided. Rename skipped.")
             return
-            
+
         if before_hashes is None:
             return
 
@@ -85,7 +87,7 @@ async def _add_torrent(client: APIClient, file_path: str, category: str, torrent
     form = form.rename(torrent_name)
     with open(file_path, "rb") as f:
         form = form.include_file(f.read(), filename=file_path)
-    
+
     await client.torrents.add(form=form.build())
     logger.info("Torrent added to download queue.")
 
@@ -98,22 +100,22 @@ async def _wait_for_new_hash(
 ) -> str | None:
     """Poll for new torrent hash that wasn't in before_hashes."""
     start_time = asyncio.get_running_loop().time()
-    
+
     while asyncio.get_running_loop().time() - start_time < timeout:
         try:
             current_torrents = await client.torrents.info()
             current_hashes = {t.hash for t in current_torrents}
             new_hashes = current_hashes - before_hashes
-            
+
             if new_hashes:
                 if len(new_hashes) > 1:
                     logger.warning("Multiple new torrents detected", new_hashes=new_hashes)
                 return next(iter(new_hashes))
         except Exception as e:
             logger.warning("Error polling torrents", error=str(e))
-        
+
         await asyncio.sleep(poll_interval)
-    
+
     return None
 
 
@@ -132,14 +134,15 @@ def get_torrent_name(
         parts.append(f"[{quality}]")
     return sanitize_fs_name(" ".join(parts))
 
+
 async def _rename_torrent(
-        client: APIClient,
-        torrent_hash: str,
-        torrent_name: str,
+    client: APIClient,
+    torrent_hash: str,
+    torrent_name: str,
 ) -> None:
     """Rename torrent files/folder based on title and year."""
     logger.info("Attempting to rename torrent", torrent_hash=torrent_hash, new_name=torrent_name)
-    
+
     try:
         files = await client.torrents.files(torrent_hash)
     except Exception as e:
@@ -151,11 +154,11 @@ async def _rename_torrent(
         return
 
     rename_info = _analyze_torrent_structure(files, torrent_name)
-    
+
     if rename_info.old_name == rename_info.new_name:
         logger.info("Name already matches target. No rename needed.")
         return
-    
+
     try:
         await _apply_rename(client, torrent_hash, rename_info)
     except Exception as e:
@@ -171,16 +174,16 @@ def _analyze_torrent_structure(files: list, new_name: str) -> TorrentRenameInfo:
             old_name=files[0].name,
             new_name=f"{new_name}{ext}",
         )
-    
+
     roots = {f.name.split("/", 1)[0] for f in files}
-    
+
     if len(roots) == 1:
         return TorrentRenameInfo(
             structure=TorrentStructure.FOLDER_ROOT,
             old_name=next(iter(roots)),
             new_name=new_name,
         )
-    
+
     logger.info("Mixed-root torrent. Rename skipped", root_count=len(roots))
     return TorrentRenameInfo(
         structure=TorrentStructure.MIXED_ROOT,
@@ -201,4 +204,3 @@ async def _apply_rename(
     elif info.structure == TorrentStructure.FOLDER_ROOT:
         logger.info("Renaming root folder", old_name=info.old_name, new_name=info.new_name)
         await client.torrents.rename_folder(torrent_hash, info.old_name, info.new_name)
-
