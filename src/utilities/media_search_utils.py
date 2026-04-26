@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from bot.constants import (
     MEDIA_LIST_CALLBACK,
     MEDIA_SELECT_CALLBACK,
+    SEASON_PACK_CALLBACK,
     SEASON_SELECT_CALLBACK,
 )
 from models.movie_detail_service_types import MovieSearchResult
@@ -76,6 +77,21 @@ async def show_season_choices(
     search_context = original_query or requested_item or movie_details.title
 
     season_year_map = {s.season_number: s.year for s in movie_details.seasons}
+
+    pack_callback_key = redis_callback_save(
+        {
+            "action": SEASON_PACK_CALLBACK,
+            "movie_id": movie_details.provider_id,
+            "movie": movie_dump,
+            "movie_details": movie_dump,
+            "original_query": original_query,
+            "requested_item": requested_item,
+            "requested_type": requested_type,
+        }
+    )
+    buttons.append(
+        [InlineKeyboardButton(text="Весь пак сезонов", callback_data=pack_callback_key)]
+    )
 
     for season in seasons:
         season_year = season_year_map.get(season)

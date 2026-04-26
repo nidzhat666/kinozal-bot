@@ -86,6 +86,7 @@ async def perform_torrent_search(
     media_details: MediaDetails | None = None,
     season_number: int | None = None,
     season_year: int | None = None,
+    season_pack_only: bool = False,
 ) -> None:
     """Perform torrent search across active providers and display results."""
     queries = {query}
@@ -184,7 +185,9 @@ async def perform_torrent_search(
         await target_message.edit_text("Не удалось выполнить поиск по торрентам.")
         return
 
-    results = _filter_and_process_results(raw_results, media_details, season_number, season_year)
+    results = _filter_and_process_results(
+        raw_results, media_details, season_number, season_year, season_pack_only=season_pack_only
+    )
 
     filter_logger = logger.bind(component="utility", operation="filter_results")
     filter_logger.info(
@@ -394,11 +397,8 @@ def _has_multiple_video_tracks(result_name: str) -> bool:
     return any(re.search(pattern, result_lower) for pattern in patterns)
 
 
-def _is_season_pack(result_name: str, target_season: int | None) -> bool:
+def _is_season_pack(result_name: str) -> bool:
     """Check if result is a multi-season pack."""
-    if target_season is None:
-        return False
-
     result_lower = result_name.lower()
     pack_patterns = [
         r"\d+\s*-\s*\d+\s*сезон",
@@ -467,6 +467,8 @@ def _should_skip_result(
     season_number: int | None,
     expected_year: int | None,
     expected_titles: list[str],
+    *,
+    season_pack_only: bool = False,
 ) -> tuple[bool, str | None]:
     """Check if result should be skipped and return skip reason if so."""
     if not result.seeds:
@@ -492,11 +494,15 @@ def _should_skip_result(
     ) and not _has_video_markers(result_name):
         return True, "unknown_quality"
 
-    if _is_season_pack(result_name, season_number):
-        return True, "season_pack"
-
-    if season_number is not None and not is_season_match(result_name, season_number):
-        return True, "season_mismatch"
+    is_pack = _is_season_pack(result_name)
+    if season_pack_only:
+        if not is_pack:
+            return True, "not_season_pack"
+    else:
+        if season_number is not None and is_pack:
+            return True, "season_pack"
+        if season_number is not None and not is_season_match(result_name, season_number):
+            return True, "season_mismatch"
 
     if expected_year is not None and not _is_year_match(result_name, expected_year):
         return True, "year_mismatch"
@@ -512,6 +518,8 @@ def _filter_and_process_results(
     media_details: MediaDetails | None,
     season_number: int | None,
     season_year: int | None = None,
+    *,
+    season_pack_only: bool = False,
 ) -> list[MovieSearchResult]:
     """Filter and process raw torrent search results."""
     seen_movie_ids = set()
@@ -555,6 +563,7 @@ def _filter_and_process_results(
             season_number,
             expected_year,
             expected_titles,
+            season_pack_only=season_pack_only,
         )
 
         if should_skip:

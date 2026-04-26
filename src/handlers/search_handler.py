@@ -8,6 +8,7 @@ from bot.constants import (
     MEDIA_SELECT_CALLBACK,
     SEARCH_MOVIE_CALLBACK,
     SEASON_LIST_CALLBACK,
+    SEASON_PACK_CALLBACK,
     SEASON_SELECT_CALLBACK,
 )
 from services.exceptions import NoResultsFoundError, TmdbApiError
@@ -252,6 +253,56 @@ async def handle_season_selection(callback_query: CallbackQuery):
         media_details=movie_details,
         season_number=season_number,
         season_year=season_year,
+    )
+    await callback_query.answer()
+
+
+@router.callback_query(lambda c: check_action(c.data, SEASON_PACK_CALLBACK))
+async def handle_season_pack_selection(callback_query: CallbackQuery):
+    if not (redis_data := redis_callback_get(callback_query.data)):
+        await callback_query.answer("Не удалось обработать выбор.", show_alert=True)
+        return
+
+    if not (movie_details := await get_details_from_callback(redis_data)):
+        await callback_query.answer("Не удалось получить детали.", show_alert=True)
+        return
+
+    active_providers = get_active_providers()
+    if not active_providers:
+        await callback_query.answer(
+            "Нет активных торрент-провайдеров. Проверьте настройки.", show_alert=True
+        )
+        return
+    max_query_length = active_providers[0].max_query_length
+
+    search_query = media_utils.build_torrent_query_from_media_details(
+        movie_details, max_length=max_query_length
+    )
+
+    requested_item = redis_data.get("requested_item", movie_details.title)
+
+    back_callback_key = redis_callback_save(
+        {
+            "action": SEASON_LIST_CALLBACK,
+            "movie_id": movie_details.provider_id,
+            "movie": redis_data.get("movie"),
+            "movie_details": redis_data.get("movie_details") or redis_data.get("movie"),
+            "original_query": redis_data.get("original_query"),
+            "requested_item": redis_data.get("requested_item") or movie_details.title,
+            "requested_type": redis_data.get("requested_type", "series"),
+        }
+    )
+
+    await perform_torrent_search(
+        search_query,
+        callback_query.message,
+        callback_query,
+        requested_item=requested_item,
+        requested_type=redis_data.get("requested_type", "series"),
+        back_callback_key=back_callback_key,
+        back_button_text="⬅️ Назад к сезонам",
+        media_details=movie_details,
+        season_pack_only=True,
     )
     await callback_query.answer()
 
