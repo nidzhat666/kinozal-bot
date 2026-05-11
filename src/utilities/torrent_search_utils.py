@@ -20,6 +20,7 @@ from torrents import get_active_providers
 
 if TYPE_CHECKING:
     from models.search_provider_types import MediaDetails
+    from torrents.interfaces import TorrentProviderProtocol
 from utilities.handlers_utils import redis_callback_save
 from utilities.logger_utils import get_logger
 from utilities.media_utils import (
@@ -33,44 +34,46 @@ from utilities.media_utils import (
 logger = get_logger(__name__)
 
 
-def _build_year_range_queries(clean_titles: list[str], year: int | str | None) -> set[str]:
-    """Build search queries with year range (year-1, year, year+1)."""
-    queries = set()
-    parsed_year = parse_year(year)
-    if not parsed_year:
-        return queries
+def _build_provider_queries(
+    provider: TorrentProviderProtocol,
+    fallback_query: str,
+    media_details: MediaDetails | None,
+    season_number: int | None,
+    season_year: int | None,
+    *,
+    season_pack_only: bool,
+) -> list[str]:
+    """Return ordered, de-duplicated queries to run against one provider."""
+    candidates: list[str] = []
+    if media_details is not None:
+        try:
+            candidates.extend(
+                provider.build_queries(
+                    media_details=media_details,
+                    season_number=season_number,
+                    season_year=season_year,
+                    season_pack_only=season_pack_only,
+                )
+            )
+        except Exception as exc:
+            logger.bind(component="utility", operation="build_queries").warning(
+                "Provider build_queries failed; falling back to user query",
+                provider=provider.name,
+                error_type=type(exc).__name__,
+                error_message=str(exc),
+            )
+    candidates.append(fallback_query)
 
-    year_range = [y for y in [parsed_year - 1, parsed_year, parsed_year + 1] if 1900 <= y <= 2100]
-    if not year_range:
-        return queries
-
-    year_range_str = " | ".join(str(y) for y in year_range)
-    for clean_title in clean_titles:
-        queries.add(f"{clean_title} {year_range_str}")
-    if len(clean_titles) > 1:
-        combined_titles = "|".join(sorted(clean_titles))
-        queries.add(f"({combined_titles}) + ({year_range_str})")
-    return queries
-
-
-def _build_season_queries(
-    clean_titles: list[str], season_number: int, year: int | str | None
-) -> set[str]:
-    """Build search queries for series season with optional year."""
-    queries = set()
-    season_variants = f"сезон {season_number}|season {season_number}|S{season_number:02d}"
-    parsed_year = parse_year(year)
-
-    for clean_title in clean_titles:
-        queries.add(f"{clean_title} ({season_variants})")
-        if parsed_year:
-            year_range = [
-                y for y in [parsed_year - 1, parsed_year, parsed_year + 1] if 1900 <= y <= 2100
-            ]
-            if year_range:
-                year_range_str = " | ".join(str(y) for y in year_range)
-                queries.add(f"{clean_title} ({season_variants}) ({year_range_str})")
-
+    seen: set[str] = set()
+    queries: list[str] = []
+    for raw in candidates:
+        if not raw:
+            continue
+        q = raw.strip()
+        if not q or q in seen:
+            continue
+        seen.add(q)
+        queries.append(q)
     return queries
 
 
@@ -89,58 +92,56 @@ async def perform_torrent_search(
     season_pack_only: bool = False,
 ) -> None:
     """Perform torrent search across active providers and display results."""
-    queries = {query}
-
-    if media_details:
-        titles = [t for t in [media_details.title, media_details.original_title] if t]
-        clean_titles = [clean_title_for_query(t) for t in titles]
-
-        if season_number is not None and media_details.is_series:
-            year_to_use = season_year if season_year else media_details.year
-            queries.update(_build_season_queries(clean_titles, season_number, year_to_use))
-        elif not media_details.is_series:
-            year_queries = _build_year_range_queries(clean_titles, media_details.year)
-            queries.update(year_queries if year_queries else clean_titles)
-        else:
-            if media_details.year:
-                year_queries = _build_year_range_queries(clean_titles, media_details.year)
-                queries.update(year_queries if year_queries else clean_titles)
-            else:
-                queries.update(clean_titles)
-
-    queries = {q for q in queries if q.strip()}
     started_at = perf_counter()
     search_logger = logger.bind(component="utility", operation="torrent_search")
+
+    active_providers = get_active_providers()
+    target_message = callback_query.message if callback_query else message
+
+    if not active_providers:
+        await target_message.edit_text("Нет активных торрент-провайдеров. Проверьте настройки.")
+        return
+
+    provider_queries: dict[str, list[str]] = {
+        provider.name: _build_provider_queries(
+            provider,
+            query,
+            media_details,
+            season_number,
+            season_year,
+            season_pack_only=season_pack_only,
+        )
+        for provider in active_providers
+    }
+
+    total_query_count = sum(len(qs) for qs in provider_queries.values())
     search_logger.info(
         "Performing parallel search",
-        query_count=len(queries),
-        queries=list(queries),
+        provider_count=len(active_providers),
+        providers=[p.name for p in active_providers],
+        provider_queries=provider_queries,
+        total_query_count=total_query_count,
         requested_item=requested_item,
         requested_type=requested_type,
     )
 
-    active_providers = get_active_providers()
-    if not active_providers:
-        target_message = callback_query.message if callback_query else message
-        await target_message.edit_text("Нет активных торрент-провайдеров. Проверьте настройки.")
+    tasks_with_info: list[tuple[TorrentProviderProtocol, str, object]] = []
+    for provider in active_providers:
+        for q in provider_queries.get(provider.name, []):
+            tasks_with_info.append(
+                (
+                    provider,
+                    q,
+                    provider.search(
+                        q, requested_item=requested_item, requested_type=requested_type
+                    ),
+                )
+            )
+
+    if not tasks_with_info:
+        search_logger.warning("No queries to run", providers=[p.name for p in active_providers])
+        await target_message.edit_text("По запросу ничего не найдено.")
         return
-
-    search_logger.info(
-        "Searching in active providers",
-        provider_count=len(active_providers),
-        providers=[p.name for p in active_providers],
-    )
-    target_message = callback_query.message if callback_query else message
-
-    tasks_with_info = [
-        (
-            provider,
-            q,
-            provider.search(q, requested_item=requested_item, requested_type=requested_type),
-        )
-        for q in queries
-        for provider in active_providers
-    ]
 
     tasks = [task for _, _, task in tasks_with_info]
 
@@ -236,7 +237,7 @@ async def perform_torrent_search(
         search_logger.info(
             "Sent torrent search results",
             result_count=len(results),
-            query_count=len(queries),
+            query_count=total_query_count,
             duration_ms=duration_ms,
         )
 
@@ -670,15 +671,21 @@ def _log_final_results_stats(results: list[MovieSearchResult]) -> None:
 
 
 def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
-    """Check if result name matches expected titles with strict matching.
+    """Return True if any expected title plausibly matches ``result_name``.
 
-    Does NOT match if expected title is just a substring of a longer title
-    (e.g., "friends" in "smiling friends").
+    Strategies tried, any one is enough:
+      - prefix match against the result (or its main / first section)
+      - expected words joined by separators ``:-/|``
+      - multi-word expected appears as a consecutive phrase anywhere
+        (skipped for single-word titles to avoid ``friends`` ⊂ ``smiling friends``)
+      - SequenceMatcher similarity > 0.8 as a backstop
     """
     result_clean = clean_title_for_query(result_name).lower()
 
     for expected in expected_titles:
         expected_clean = clean_title_for_query(expected).lower()
+        if not expected_clean:
+            continue
 
         prefixes = ["сезон", "season", "s"]
         result_without_prefix = result_clean
@@ -691,6 +698,8 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
         if result_without_prefix.startswith(expected_clean):
             return True
 
+        expected_words = expected_clean.split()
+
         main_title_match = re.match(r"^([^:\-/\|]+)", result_without_prefix)
         if main_title_match:
             main_title = main_title_match.group(1).strip()
@@ -698,10 +707,10 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
             if main_title.startswith(expected_clean):
                 return True
 
-            expected_words = expected_clean.split()
             main_title_words = main_title.split()
             if (
-                len(main_title_words) >= len(expected_words)
+                expected_words
+                and len(main_title_words) >= len(expected_words)
                 and main_title_words[: len(expected_words)] == expected_words
             ):
                 return True
@@ -712,18 +721,21 @@ def _is_fuzzy_match(result_name: str, expected_titles: list[str]) -> bool:
             if first_section.startswith(expected_clean):
                 return True
 
-            expected_words = expected_clean.split()
             first_section_words = first_section.split()
             if (
-                len(first_section_words) >= len(expected_words)
+                expected_words
+                and len(first_section_words) >= len(expected_words)
                 and first_section_words[: len(expected_words)] == expected_words
             ):
                 return True
 
-        expected_words = expected_clean.split()
-        if expected_words:
-            words_pattern = r"\s*[:\-/\|]\s*".join(re.escape(word) for word in expected_words)
-            if re.search(words_pattern, result_clean):
+        if len(expected_words) >= 2:
+            sep_pattern = r"\s*[:\-/\|]\s*".join(re.escape(w) for w in expected_words)
+            if re.search(sep_pattern, result_clean):
+                return True
+
+            phrase_pattern = r"\b" + r"\s+".join(re.escape(w) for w in expected_words) + r"\b"
+            if re.search(phrase_pattern, result_clean):
                 return True
 
         if calculate_similarity(expected, result_name) > 0.8:

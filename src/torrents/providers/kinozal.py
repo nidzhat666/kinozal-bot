@@ -4,6 +4,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 import aiofile
 import httpx
@@ -20,6 +21,10 @@ from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities import kinozal_utils
 from utilities.kinozal_utils import get_url
 from utilities.logger_utils import get_provider_logger
+from utilities.query_builders import build_expressive_queries
+
+if TYPE_CHECKING:
+    from models.search_provider_types import MediaDetails
 
 PROVIDER_NAME = "kinozal"
 
@@ -555,6 +560,23 @@ class KinozalTorrentProvider(TorrentProviderProtocol):
             query,
             requested_item=requested_item,
             requested_type=requested_type,
+        )
+
+    def build_queries(
+        self,
+        *,
+        media_details: MediaDetails,
+        season_number: int | None = None,
+        season_year: int | None = None,
+        season_pack_only: bool = False,
+    ) -> list[str]:
+        """Kinozal supports ``(a|b)`` alternation — use expressive queries."""
+        return build_expressive_queries(
+            media_details,
+            season_number=season_number,
+            season_year=season_year,
+            season_pack_only=season_pack_only,
+            max_length=self.max_query_length,
         )
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:

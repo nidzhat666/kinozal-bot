@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from typing import TYPE_CHECKING
 
 import bleach
 import httpx
@@ -19,90 +21,124 @@ from models.movie_detail_service_types import (
 from services.exceptions import RutrackerApiError
 from torrents.interfaces import DownloadResult, TorrentProviderProtocol
 from utilities.logger_utils import get_provider_logger
+from utilities.query_builders import build_flat_queries
+
+if TYPE_CHECKING:
+    from models.search_provider_types import MediaDetails
 
 PROVIDER_NAME = "rutracker"
+
+_MAX_RETRIES = 2
+_RETRY_BACKOFF_SECONDS = (0.5, 1.5)
+_AUTH_TTL_SECONDS = 30 * 60
+_LOGIN_TOKEN = "%E2%F5%EE%E4"
 
 
 def get_url(path: str = "") -> str:
     return f"https://{RUTRACKER_URL}{path}"
 
 
-async def _build_auth_cookies(credentials: dict[str, str] | None) -> dict[str, str]:
-    if not credentials:
-        return {}
-
-    try:
-        return await _authenticate(credentials)
-    except Exception as exc:
-        logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_failed")
-        error_type = type(exc).__name__
-        logger.warning(
-            "Authentication failed, using guest access",
-            error_type=error_type,
-            error_message=str(exc),
-        )
-        return {}
+class _TransientApiError(RutrackerApiError):
+    """Marker for 5xx / transport errors so the retry loop can target them."""
 
 
-async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+def _backoff_delay(attempt: int) -> float:
+    index = min(attempt, len(_RETRY_BACKOFF_SECONDS) - 1)
+    return _RETRY_BACKOFF_SECONDS[index]
+
+
+def _is_transient_status(status_code: int) -> bool:
+    return 500 <= status_code < 600
+
+
+def _is_transient_http_error(exc: BaseException) -> bool:
+    return isinstance(exc, httpx.TransportError | httpx.RemoteProtocolError)
+
+
+async def _authenticate_once(credentials: dict[str, str]) -> dict[str, str]:
+    """Perform one login attempt; raises ``_TransientApiError`` on retryable failures."""
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="auth_start")
     logger.info("Authentication started")
 
-    username = credentials.get("username")
-    password = credentials.get("password")
     url = get_url("/forum/login.php")
     data = {
-        "login_username": username,
-        "login_password": password,
-        "login": "%E2%F5%EE%E4",
+        "login_username": credentials.get("username"),
+        "login_password": credentials.get("password"),
+        "login": _LOGIN_TOKEN,
     }
 
+    http_start = perf_counter()
     try:
-        http_start = perf_counter()
         async with httpx.AsyncClient() as client:
             response = await client.post(url, data=data)
-            http_duration_ms = int((perf_counter() - http_start) * 1000)
-            logger = logger.bind(operation="http_request")
-            logger.info(
-                "HTTP request",
-                method="POST",
-                url=url,
-                status_code=response.status_code,
-                duration_ms=http_duration_ms,
-            )
-            if response.status_code != 302:
-                error_type = "HTTPError"
-                error_message = "Failed to authenticate"
-                logger = logger.bind(operation="http_error")
-                logger.error(
-                    "HTTP error",
-                    method="POST",
-                    url=url,
-                    error_type=error_type,
-                    error_message=error_message,
-                )
-                raise RutrackerApiError(error_message)
     except httpx.HTTPError as exc:
         http_duration_ms = int((perf_counter() - http_start) * 1000)
-        error_type = type(exc).__name__
         error_message = f"HTTP client error during Rutracker authentication: {exc}"
-        logger = logger.bind(operation="http_error")
-        logger.error(
+        logger.bind(operation="http_error").error(
             "HTTP error",
             method="POST",
             url=url,
-            error_type=error_type,
+            error_type=type(exc).__name__,
             error_message=error_message,
             duration_ms=http_duration_ms,
             exc_info=True,
         )
+        if _is_transient_http_error(exc):
+            raise _TransientApiError(error_message) from exc
         raise RutrackerApiError(error_message) from exc
 
+    http_duration_ms = int((perf_counter() - http_start) * 1000)
+    logger.bind(operation="http_request").info(
+        "HTTP request",
+        method="POST",
+        url=url,
+        status_code=response.status_code,
+        duration_ms=http_duration_ms,
+    )
+
+    if _is_transient_status(response.status_code):
+        message = f"Failed to authenticate: HTTP {response.status_code}"
+        logger.bind(operation="http_error").error(
+            "HTTP error",
+            method="POST",
+            url=url,
+            error_type="HTTPError",
+            error_message=message,
+            status_code=response.status_code,
+        )
+        raise _TransientApiError(message)
+
+    if response.status_code != 302:
+        logger.bind(operation="http_error").error(
+            "HTTP error",
+            method="POST",
+            url=url,
+            error_type="HTTPError",
+            error_message="Failed to authenticate",
+            status_code=response.status_code,
+        )
+        raise RutrackerApiError("Failed to authenticate")
+
+    bb_session = response.cookies.get("bb_session")
+    if not bb_session:
+        raise RutrackerApiError("Failed to authenticate: bb_session cookie missing")
+
     duration_ms = int((perf_counter() - started_at) * 1000)
-    logger = logger.bind(operation="auth_success")
-    logger.info("Authentication success", duration_ms=duration_ms)
-    return {"bb_session": response.cookies.get("bb_session")}
+    logger.bind(operation="auth_success").info("Authentication success", duration_ms=duration_ms)
+    return {"bb_session": bb_session}
+
+
+async def _authenticate(credentials: dict[str, str]) -> dict[str, str]:
+    """Authenticate, retrying on transient 5xx / network errors."""
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            return await _authenticate_once(credentials)
+        except _TransientApiError:
+            if attempt >= _MAX_RETRIES:
+                raise
+            await asyncio.sleep(_backoff_delay(attempt))
+    raise RutrackerApiError("Authentication failed: retries exhausted")
 
 
 @dataclass(slots=True)
@@ -119,7 +155,7 @@ async def _search_movies(
     *,
     requested_item: str | None = None,
     requested_type: str | None = None,
-    credentials: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
 ) -> list[MovieSearchResult]:
     """Search for torrents on Rutracker."""
     started_at = perf_counter()
@@ -131,7 +167,7 @@ async def _search_movies(
         requested_type=requested_type,
     )
 
-    raw_items = await _fetch_search_items(query, credentials)
+    raw_items = await _fetch_search_items(query, cookies)
     if not raw_items:
         duration_ms = int((perf_counter() - started_at) * 1000)
         logger = logger.bind(operation="search_no_results")
@@ -181,64 +217,114 @@ async def _search_movies(
 
 
 async def _fetch_search_items(
-    query: str, credentials: dict[str, str] | None = None
+    query: str, cookies: dict[str, str] | None = None
 ) -> list[_RawSearchItem]:
     """Fetch search results from Rutracker."""
-    html = await _get_search_text(query, credentials)
+    html = await _get_search_text(query, cookies)
     return _parse_search_results(html)
 
 
-async def _get_search_text(query: str, credentials: dict[str, str] | None = None) -> str:
-    """Get HTML content from Rutracker search page."""
-    cookies = await _build_auth_cookies(credentials)
+async def _get_search_text(query: str, cookies: dict[str, str] | None = None) -> str:
+    """Fetch the Rutracker search page HTML, retrying on transient 5xx."""
     url = get_url("/forum/tracker.php")
     params = {"nm": query}
-    data = {
-        "f[]": "-1",
-        "o": "10",
-        "s": "2",
-        "pn": "",
-        "nm": query,
-    }
-    logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
-    start_time = perf_counter()
+    data = {"f[]": "-1", "o": "10", "s": "2", "pn": "", "nm": query}
+    logger = get_provider_logger(PROVIDER_NAME)
 
-    try:
-        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
-            response = await client.post(url, params=params, data=data)
-            response.raise_for_status()
+    last_status: int | None = None
+    last_exc: httpx.HTTPError | None = None
+
+    for attempt in range(_MAX_RETRIES + 1):
+        start_time = perf_counter()
+        try:
+            async with httpx.AsyncClient(cookies=cookies or {}, follow_redirects=True) as client:
+                response = await client.post(url, params=params, data=data)
+        except httpx.HTTPError as exc:
             duration_ms = int((perf_counter() - start_time) * 1000)
-            logger.info(
-                "HTTP request",
+            last_exc = exc
+            if attempt < _MAX_RETRIES and _is_transient_http_error(exc):
+                logger.bind(operation="http_retry").warning(
+                    "HTTP transient error, retrying",
+                    method="POST",
+                    url=url,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    duration_ms=duration_ms,
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(_backoff_delay(attempt))
+                continue
+            error_message = f"HTTP error while requesting {url}: {exc}"
+            logger.bind(operation="http_error").error(
+                "HTTP error",
+                method="POST",
+                url=url,
+                error_type=type(exc).__name__,
+                error_message=error_message,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+            raise RutrackerApiError(error_message) from exc
+
+        duration_ms = int((perf_counter() - start_time) * 1000)
+        last_status = response.status_code
+
+        if _is_transient_status(response.status_code) and attempt < _MAX_RETRIES:
+            logger.bind(operation="http_retry").warning(
+                "HTTP transient error, retrying",
                 method="POST",
                 url=str(response.url),
                 status_code=response.status_code,
                 duration_ms=duration_ms,
+                attempt=attempt + 1,
             )
-            return response.text
-    except httpx.HTTPError as exc:
-        duration_ms = int((perf_counter() - start_time) * 1000)
-        error_type = type(exc).__name__
-        error_message = f"HTTP error while requesting {url}: {exc}"
-        logger = logger.bind(operation="http_error")
-        logger.error(
-            "HTTP error",
+            await asyncio.sleep(_backoff_delay(attempt))
+            continue
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_message = f"HTTP error while requesting {url}: {exc}"
+            logger.bind(operation="http_error").error(
+                "HTTP error",
+                method="POST",
+                url=url,
+                error_type=type(exc).__name__,
+                error_message=error_message,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+            raise RutrackerApiError(error_message) from exc
+
+        logger.bind(operation="http_request").info(
+            "HTTP request",
             method="POST",
-            url=url,
-            error_type=error_type,
-            error_message=error_message,
+            url=str(response.url),
+            status_code=response.status_code,
             duration_ms=duration_ms,
-            exc_info=True,
         )
-        raise RutrackerApiError(error_message) from exc
+        return response.text
+
+    error_message = (
+        f"HTTP error while requesting {url}: retries exhausted (last_status={last_status})"
+    )
+    logger.bind(operation="http_error").error(
+        "HTTP error",
+        method="POST",
+        url=url,
+        error_type="HTTPStatusError",
+        error_message=error_message,
+        status_code=last_status,
+    )
+    if last_exc is not None:
+        raise RutrackerApiError(error_message) from last_exc
+    raise RutrackerApiError(error_message)
 
 
-async def _fetch_torrent_page(
-    movie_id: int | str, credentials: dict[str, str] | None = None
-) -> str:
+async def _fetch_torrent_page(movie_id: int | str, cookies: dict[str, str] | None = None) -> str:
     """Get HTML content from Rutracker torrent page."""
-    cookies = await _build_auth_cookies(credentials)
     url = get_url(f"/forum/viewtopic.php?t={movie_id}")
+    cookies = cookies or {}
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
     start_time = perf_counter()
 
@@ -274,14 +360,14 @@ async def _fetch_torrent_page(
 
 async def _download_movie(
     movie_id: int | str,
-    credentials: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
 ) -> DownloadResult:
     """Download torrent file from Rutracker."""
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
     logger.info("Download started", movie_id=str(movie_id))
 
-    cookies = await _build_auth_cookies(credentials)
+    cookies = cookies or {}
     url = get_url(f"/forum/dl.php?t={movie_id}")
 
     try:
@@ -700,6 +786,9 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
 
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
+        self._cached_cookies: dict[str, str] = {}
+        self._cookies_expire_at: float = 0.0
+        self._auth_lock = asyncio.Lock()
 
     @property
     def base_url(self) -> str:
@@ -710,6 +799,35 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         """Get the full URL to the torrent page on Rutracker."""
         return f"{self.base_url}/forum/viewtopic.php?t={movie_id}"
 
+    async def _get_cookies(self) -> dict[str, str]:
+        """Return cached auth cookies, refreshing under a lock when stale."""
+        if not self._credentials:
+            return {}
+
+        loop = asyncio.get_running_loop()
+        if self._cached_cookies and loop.time() < self._cookies_expire_at:
+            return self._cached_cookies
+
+        async with self._auth_lock:
+            if self._cached_cookies and loop.time() < self._cookies_expire_at:
+                return self._cached_cookies
+
+            try:
+                cookies = await _authenticate(self._credentials)
+            except Exception as exc:
+                get_provider_logger(PROVIDER_NAME).bind(operation="auth_failed").warning(
+                    "Authentication failed, using guest access",
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                )
+                self._cached_cookies = {}
+                self._cookies_expire_at = loop.time() + 60
+                return {}
+
+            self._cached_cookies = cookies
+            self._cookies_expire_at = loop.time() + _AUTH_TTL_SECONDS
+            return cookies
+
     async def search(
         self,
         query: str,
@@ -718,11 +836,29 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         requested_type: str | None = None,
     ) -> list[MovieSearchResult]:
         """Search for torrents on Rutracker."""
+        cookies = await self._get_cookies()
         return await _search_movies(
             query,
             requested_item=requested_item,
             requested_type=requested_type,
-            credentials=self._credentials,
+            cookies=cookies,
+        )
+
+    def build_queries(
+        self,
+        *,
+        media_details: MediaDetails,
+        season_number: int | None = None,
+        season_year: int | None = None,
+        season_pack_only: bool = False,
+    ) -> list[str]:
+        """Rutracker treats ``(|)`` literally — emit flat queries."""
+        return build_flat_queries(
+            media_details,
+            season_number=season_number,
+            season_year=season_year,
+            season_pack_only=season_pack_only,
+            max_length=self.max_query_length,
         )
 
     async def get_movie_detail(self, movie_id: int | str) -> MovieDetails:
@@ -731,7 +867,8 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         logger.debug("Fetching movie details", movie_id=str(movie_id))
 
         try:
-            html = await _fetch_torrent_page(movie_id, self._credentials)
+            cookies = await self._get_cookies()
+            html = await _fetch_torrent_page(movie_id, cookies)
             soup = BeautifulSoup(html, "html.parser")
             post_body_html = _extract_post_body_html(soup)
 
@@ -778,4 +915,5 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
 
     async def download_movie(self, movie_id: int | str) -> DownloadResult:
         """Download torrent file from Rutracker."""
-        return await _download_movie(movie_id, self._credentials)
+        cookies = await self._get_cookies()
+        return await _download_movie(movie_id, cookies)

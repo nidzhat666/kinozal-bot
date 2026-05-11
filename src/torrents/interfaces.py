@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from models.movie_detail_service_types import MovieDetails, MovieSearchResult
+    from models.search_provider_types import MediaDetails
 
 
 class DownloadResult:
@@ -46,6 +47,17 @@ class TorrentProviderProtocol(Protocol):
 
     @abstractmethod
     async def download_movie(self, movie_id: int | str) -> DownloadResult: ...
+
+    def build_queries(
+        self,
+        *,
+        media_details: MediaDetails,
+        season_number: int | None = None,
+        season_year: int | None = None,
+        season_pack_only: bool = False,
+    ) -> list[str]:
+        """Return provider-specific search queries for the given metadata."""
+        ...
 
     def get_torrent_url(self, movie_id: int | str) -> str:
         """Get the full URL to the torrent page on the tracker.
