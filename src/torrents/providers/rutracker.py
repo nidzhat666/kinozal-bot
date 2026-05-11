@@ -33,6 +33,8 @@ _RETRY_BACKOFF_SECONDS = (0.5, 1.5)
 _AUTH_TTL_SECONDS = 30 * 60
 _AUTH_FAILURE_COOLDOWN = 60
 _LOGIN_TOKEN = "%E2%F5%EE%E4"
+_DEFAULT_HTTP_TIMEOUT = 4.0
+_DETAIL_HTTP_TIMEOUT = 8.0
 
 
 def get_url(path: str = "") -> str:
@@ -56,6 +58,125 @@ def _is_transient_http_error(exc: BaseException) -> bool:
     return isinstance(exc, httpx.TransportError | httpx.RemoteProtocolError)
 
 
+def _make_client(cookies: dict[str, str] | None, timeout: float) -> httpx.AsyncClient:
+    """Factory used by the retry helper; tests monkey-patch this."""
+    return httpx.AsyncClient(
+        cookies=cookies or {},
+        follow_redirects=True,
+        timeout=timeout,
+    )
+
+
+async def _request_with_retry(
+    method: str,
+    url: str,
+    *,
+    cookies: dict[str, str] | None = None,
+    params: dict | None = None,
+    data: dict | None = None,
+    timeout: float = _DEFAULT_HTTP_TIMEOUT,
+) -> httpx.Response:
+    """Execute an HTTP request, retrying on 5xx and transient transport errors.
+
+    Logs each attempt with structured context and raises ``RutrackerApiError``
+    on final failure (either a non-transient error or exhausted retries).
+    """
+    logger = get_provider_logger(PROVIDER_NAME)
+
+    for attempt in range(_MAX_RETRIES + 1):
+        is_last_attempt = attempt == _MAX_RETRIES
+        start_time = perf_counter()
+
+        try:
+            async with _make_client(cookies, timeout) as client:
+                response = await client.request(method, url, params=params, data=data)
+        except httpx.HTTPError as exc:
+            duration_ms = int((perf_counter() - start_time) * 1000)
+            transient = _is_transient_http_error(exc)
+            if transient and not is_last_attempt:
+                logger.bind(operation="http_retry").warning(
+                    "HTTP transient error, retrying",
+                    method=method,
+                    url=url,
+                    error_type=type(exc).__name__,
+                    error_message=str(exc),
+                    duration_ms=duration_ms,
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(_backoff_delay(attempt))
+                continue
+            error_message = (
+                f"HTTP error while requesting {url}: retries exhausted ({exc})"
+                if transient
+                else f"HTTP error while requesting {url}: {exc}"
+            )
+            logger.bind(operation="http_error").error(
+                "HTTP error",
+                method=method,
+                url=url,
+                error_type=type(exc).__name__,
+                error_message=error_message,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+            raise RutrackerApiError(error_message) from exc
+
+        duration_ms = int((perf_counter() - start_time) * 1000)
+
+        if _is_transient_status(response.status_code):
+            if not is_last_attempt:
+                logger.bind(operation="http_retry").warning(
+                    "HTTP transient error, retrying",
+                    method=method,
+                    url=str(response.url),
+                    status_code=response.status_code,
+                    duration_ms=duration_ms,
+                    attempt=attempt + 1,
+                )
+                await asyncio.sleep(_backoff_delay(attempt))
+                continue
+            error_message = (
+                f"HTTP error while requesting {url}: "
+                f"retries exhausted (last_status={response.status_code})"
+            )
+            logger.bind(operation="http_error").error(
+                "HTTP error",
+                method=method,
+                url=str(response.url),
+                error_type="HTTPStatusError",
+                error_message=error_message,
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+            )
+            raise RutrackerApiError(error_message)
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_message = f"HTTP error while requesting {url}: {exc}"
+            logger.bind(operation="http_error").error(
+                "HTTP error",
+                method=method,
+                url=url,
+                error_type=type(exc).__name__,
+                error_message=error_message,
+                duration_ms=duration_ms,
+                exc_info=True,
+            )
+            raise RutrackerApiError(error_message) from exc
+
+        logger.bind(operation="http_request").info(
+            "HTTP request",
+            method=method,
+            url=str(response.url),
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+        return response
+
+    raise RutrackerApiError(f"HTTP error while requesting {url}: retries exhausted")
+
+
 async def _authenticate_once(credentials: dict[str, str]) -> dict[str, str]:
     """Perform one login attempt; raises ``_TransientApiError`` on retryable failures."""
     started_at = perf_counter()
@@ -71,7 +192,7 @@ async def _authenticate_once(credentials: dict[str, str]) -> dict[str, str]:
 
     http_start = perf_counter()
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_DEFAULT_HTTP_TIMEOUT) as client:
             response = await client.post(url, data=data)
     except httpx.HTTPError as exc:
         http_duration_ms = int((perf_counter() - http_start) * 1000)
@@ -230,207 +351,54 @@ async def _get_search_text(query: str, cookies: dict[str, str] | None = None) ->
     url = get_url("/forum/tracker.php")
     params = {"nm": query}
     data = {"f[]": "-1", "o": "10", "s": "2", "pn": "", "nm": query}
-    logger = get_provider_logger(PROVIDER_NAME)
-
-    last_status: int | None = None
-    last_exc: httpx.HTTPError | None = None
-
-    for attempt in range(_MAX_RETRIES + 1):
-        start_time = perf_counter()
-        try:
-            async with httpx.AsyncClient(cookies=cookies or {}, follow_redirects=True) as client:
-                response = await client.post(url, params=params, data=data)
-        except httpx.HTTPError as exc:
-            duration_ms = int((perf_counter() - start_time) * 1000)
-            last_exc = exc
-            if attempt < _MAX_RETRIES and _is_transient_http_error(exc):
-                logger.bind(operation="http_retry").warning(
-                    "HTTP transient error, retrying",
-                    method="POST",
-                    url=url,
-                    error_type=type(exc).__name__,
-                    error_message=str(exc),
-                    duration_ms=duration_ms,
-                    attempt=attempt + 1,
-                )
-                await asyncio.sleep(_backoff_delay(attempt))
-                continue
-            error_message = f"HTTP error while requesting {url}: {exc}"
-            logger.bind(operation="http_error").error(
-                "HTTP error",
-                method="POST",
-                url=url,
-                error_type=type(exc).__name__,
-                error_message=error_message,
-                duration_ms=duration_ms,
-                exc_info=True,
-            )
-            raise RutrackerApiError(error_message) from exc
-
-        duration_ms = int((perf_counter() - start_time) * 1000)
-        last_status = response.status_code
-
-        if _is_transient_status(response.status_code) and attempt < _MAX_RETRIES:
-            logger.bind(operation="http_retry").warning(
-                "HTTP transient error, retrying",
-                method="POST",
-                url=str(response.url),
-                status_code=response.status_code,
-                duration_ms=duration_ms,
-                attempt=attempt + 1,
-            )
-            await asyncio.sleep(_backoff_delay(attempt))
-            continue
-
-        try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            error_message = f"HTTP error while requesting {url}: {exc}"
-            logger.bind(operation="http_error").error(
-                "HTTP error",
-                method="POST",
-                url=url,
-                error_type=type(exc).__name__,
-                error_message=error_message,
-                duration_ms=duration_ms,
-                exc_info=True,
-            )
-            raise RutrackerApiError(error_message) from exc
-
-        logger.bind(operation="http_request").info(
-            "HTTP request",
-            method="POST",
-            url=str(response.url),
-            status_code=response.status_code,
-            duration_ms=duration_ms,
-        )
-        return response.text
-
-    error_message = (
-        f"HTTP error while requesting {url}: retries exhausted (last_status={last_status})"
-    )
-    logger.bind(operation="http_error").error(
-        "HTTP error",
-        method="POST",
-        url=url,
-        error_type="HTTPStatusError",
-        error_message=error_message,
-        status_code=last_status,
-    )
-    if last_exc is not None:
-        raise RutrackerApiError(error_message) from last_exc
-    raise RutrackerApiError(error_message)
+    response = await _request_with_retry("POST", url, cookies=cookies, params=params, data=data)
+    return response.text
 
 
 async def _fetch_torrent_page(movie_id: int | str, cookies: dict[str, str] | None = None) -> str:
-    """Get HTML content from Rutracker torrent page."""
+    """Fetch a Rutracker viewtopic page, retrying on transient errors."""
     url = get_url(f"/forum/viewtopic.php?t={movie_id}")
-    cookies = cookies or {}
-    logger = get_provider_logger(PROVIDER_NAME).bind(operation="http_request")
-    start_time = perf_counter()
-
-    try:
-        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            duration_ms = int((perf_counter() - start_time) * 1000)
-            logger.info(
-                "HTTP request",
-                method="GET",
-                url=str(response.url),
-                status_code=response.status_code,
-                duration_ms=duration_ms,
-            )
-            return response.text
-    except httpx.HTTPError as exc:
-        duration_ms = int((perf_counter() - start_time) * 1000)
-        error_type = type(exc).__name__
-        error_message = f"HTTP error while requesting {url}: {exc}"
-        logger = logger.bind(operation="http_error")
-        logger.error(
-            "HTTP error",
-            method="GET",
-            url=url,
-            error_type=error_type,
-            error_message=error_message,
-            duration_ms=duration_ms,
-            exc_info=True,
-        )
-        raise RutrackerApiError(error_message) from exc
+    response = await _request_with_retry("GET", url, cookies=cookies, timeout=_DETAIL_HTTP_TIMEOUT)
+    return response.text
 
 
 async def _download_movie(
     movie_id: int | str,
     cookies: dict[str, str] | None = None,
 ) -> DownloadResult:
-    """Download torrent file from Rutracker."""
+    """Download a torrent file from Rutracker, retrying on transient errors."""
     started_at = perf_counter()
     logger = get_provider_logger(PROVIDER_NAME).bind(operation="download_start")
     logger.info("Download started", movie_id=str(movie_id))
 
-    cookies = cookies or {}
     url = get_url(f"/forum/dl.php?t={movie_id}")
+    response = await _request_with_retry("GET", url, cookies=cookies)
 
-    try:
-        http_start = perf_counter()
-        async with httpx.AsyncClient(cookies=cookies, follow_redirects=True) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            http_duration_ms = int((perf_counter() - http_start) * 1000)
-            logger = logger.bind(operation="http_request")
-            logger.info(
-                "HTTP request",
-                method="GET",
-                url=str(response.url),
-                status_code=response.status_code,
-                duration_ms=http_duration_ms,
-            )
-
-            content_type = response.headers.get("content-type", "").lower()
-            if "text/html" in content_type:
-                error_type = "DownloadError"
-                error_message = (
-                    f"Failed to download torrent {movie_id}: received HTML instead of torrent file. "
-                    "This may indicate authentication is required or the torrent is not available."
-                )
-                logger = logger.bind(operation="http_error")
-                logger.error(
-                    "HTTP error",
-                    method="GET",
-                    url=str(response.url),
-                    error_type=error_type,
-                    error_message=error_message,
-                )
-                raise RutrackerApiError(error_message)
-
-            payload = response.content
-    except httpx.HTTPError as exc:
-        http_duration_ms = int((perf_counter() - http_start) * 1000)
-        error_type = type(exc).__name__
-        error_message = f"HTTP error while downloading Rutracker movie {movie_id}: {exc}"
-        logger = logger.bind(operation="http_error")
-        logger.error(
+    content_type = response.headers.get("content-type", "").lower()
+    if "text/html" in content_type:
+        error_message = (
+            f"Failed to download torrent {movie_id}: received HTML instead of torrent file. "
+            "This may indicate authentication is required or the torrent is not available."
+        )
+        logger.bind(operation="http_error").error(
             "HTTP error",
             method="GET",
-            url=url,
-            error_type=error_type,
+            url=str(response.url),
+            error_type="DownloadError",
             error_message=error_message,
-            duration_ms=http_duration_ms,
-            exc_info=True,
         )
-        raise RutrackerApiError(error_message) from exc
+        raise RutrackerApiError(error_message)
 
+    payload = response.content
     if not payload or len(payload) < 10:
         duration_ms = int((perf_counter() - started_at) * 1000)
-        error_type = "DownloadError"
         error_message = (
             f"Invalid torrent file received for movie {movie_id}: file is too small or empty"
         )
-        logger = logger.bind(operation="download_error")
-        logger.error(
+        logger.bind(operation="download_error").error(
             "Download error",
             movie_id=str(movie_id),
-            error_type=error_type,
+            error_type="DownloadError",
             error_message=error_message,
             duration_ms=duration_ms,
         )
