@@ -43,8 +43,17 @@ def _build_provider_queries(
     *,
     season_pack_only: bool,
 ) -> list[str]:
-    """Return ordered, de-duplicated queries to run against one provider."""
+    """Return ordered, de-duplicated queries to run against one provider.
+
+    When ``media_details`` is available the provider's ``build_queries``
+    is authoritative — its result owns the provider-specific syntax, and
+    the handler-built ``fallback_query`` (always expressive) would just
+    pollute trackers that don't speak it. The fallback is used only when
+    there's no metadata to drive ``build_queries``.
+    """
     candidates: list[str] = []
+    used_provider_queries = False
+
     if media_details is not None:
         try:
             candidates.extend(
@@ -55,6 +64,7 @@ def _build_provider_queries(
                     season_pack_only=season_pack_only,
                 )
             )
+            used_provider_queries = True
         except Exception as exc:
             logger.bind(component="utility", operation="build_queries").warning(
                 "Provider build_queries failed; falling back to user query",
@@ -62,7 +72,9 @@ def _build_provider_queries(
                 error_type=type(exc).__name__,
                 error_message=str(exc),
             )
-    candidates.append(fallback_query)
+
+    if not used_provider_queries or not candidates:
+        candidates.append(fallback_query)
 
     seen: set[str] = set()
     queries: list[str] = []

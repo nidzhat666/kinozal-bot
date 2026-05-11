@@ -31,6 +31,7 @@ PROVIDER_NAME = "rutracker"
 _MAX_RETRIES = 2
 _RETRY_BACKOFF_SECONDS = (0.5, 1.5)
 _AUTH_TTL_SECONDS = 30 * 60
+_AUTH_FAILURE_COOLDOWN = 60
 _LOGIN_TOKEN = "%E2%F5%EE%E4"
 
 
@@ -787,7 +788,7 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
     def __init__(self, *, credentials: dict[str, str] | None = None) -> None:
         self._credentials = credentials or {}
         self._cached_cookies: dict[str, str] = {}
-        self._cookies_expire_at: float = 0.0
+        self._cookies_valid_until: float = 0.0
         self._auth_lock = asyncio.Lock()
 
     @property
@@ -800,16 +801,20 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
         return f"{self.base_url}/forum/viewtopic.php?t={movie_id}"
 
     async def _get_cookies(self) -> dict[str, str]:
-        """Return cached auth cookies, refreshing under a lock when stale."""
+        """Return cached auth cookies, refreshing under a lock when stale.
+
+        On auth failure we cache an empty dict for ``_AUTH_FAILURE_COOLDOWN``
+        seconds so concurrent searches don't each fire their own retry storm.
+        """
         if not self._credentials:
             return {}
 
         loop = asyncio.get_running_loop()
-        if self._cached_cookies and loop.time() < self._cookies_expire_at:
+        if loop.time() < self._cookies_valid_until:
             return self._cached_cookies
 
         async with self._auth_lock:
-            if self._cached_cookies and loop.time() < self._cookies_expire_at:
+            if loop.time() < self._cookies_valid_until:
                 return self._cached_cookies
 
             try:
@@ -821,11 +826,11 @@ class RutrackerTorrentProvider(TorrentProviderProtocol):
                     error_message=str(exc),
                 )
                 self._cached_cookies = {}
-                self._cookies_expire_at = loop.time() + 60
+                self._cookies_valid_until = loop.time() + _AUTH_FAILURE_COOLDOWN
                 return {}
 
             self._cached_cookies = cookies
-            self._cookies_expire_at = loop.time() + _AUTH_TTL_SECONDS
+            self._cookies_valid_until = loop.time() + _AUTH_TTL_SECONDS
             return cookies
 
     async def search(
