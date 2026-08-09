@@ -30,3 +30,24 @@ async def add_torrent(torrent_file_path: str, client: APIClient, category: str):
             "Torrent added to download queue",
             duration_ms=duration_ms,
         )
+
+
+async def add_magnet(magnet_link: str, client: APIClient, category: str):
+    """Add a magnet link to the download queue."""
+    started_at = perf_counter()
+    bound_logger = logger.bind(operation="add_magnet")
+    bound_logger.info(
+        "Adding magnet link to download queue",
+        category=category,
+    )
+    async with client:
+        form = AddFormBuilder.with_client(client)
+        form = form.category(category)
+        form = form.auto_tmm(True)
+        form = form.include_url(magnet_link)
+        await client.torrents.add(form=form.build())
+        duration_ms = int((perf_counter() - started_at) * 1000)
+        bound_logger.info(
+            "Magnet link added to download queue",
+            duration_ms=duration_ms,
+        )

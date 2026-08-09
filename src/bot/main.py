@@ -23,6 +23,7 @@ from bot.config import (
 from bot.constants import REFRESH_PLEX_COMMAND, STATUS_COMMAND
 from handlers import (
     delete_torrent_handler,
+    magnet_link_handler,
     movie_download_handler,
     pause_torrent_handler,
     refresh_plex_handler,
@@ -49,6 +50,7 @@ dp.include_routers(
     start_torrent_handler.router,
     delete_torrent_handler.router,
     refresh_plex_handler.router,
+    magnet_link_handler.router,
     search_handler.router,
 )
 
