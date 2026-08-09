@@ -13,7 +13,7 @@ RUTRACKER_CREDENTIALS = {
     "username": os.getenv("RUTRACKER_USERNAME"),
     "password": os.getenv("RUTRACKER_PASSWORD"),
 }
-KINOZAL_URL = "kinozal.tv"
+KINOZAL_URL = "kinozal.guru"
 RUTRACKER_URL = "rutracker.org"
 
 QBT_CREDENTIALS = {"username": os.getenv("QBT_USERNAME"), "password": os.getenv("QBT_PASSWORD")}
